@@ -29,3 +29,15 @@ export interface AuthUser {
   email: string | null;
   photoURL: string | null;
 }
+
+export interface ProductCatalogItem {
+  id: string;
+  name: string; // ชื่อสินค้า
+  category: string; // กลุ่มที่ผลิตสินค้า
+  unit: string; // หน่วยนับ (ชิ้น, กล่อง, ถุง ฯลฯ)
+  sellingPrice: number; // ราคาขาย / ราคาจ่ายออก (บาท)
+  costPrice?: number; // ราคาต้นทุน / ราคารับเข้า (บาท)
+  code?: string; // รหัสสินค้า / SKU
+  initialStock?: number; // จำนวนสต๊อกยกมา
+  note?: string; // รายละเอียดเพิ่มเติม
+}

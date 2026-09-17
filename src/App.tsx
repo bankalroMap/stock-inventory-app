@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StockTransaction, AuthUser } from './types';
+import { StockTransaction, AuthUser, ProductCatalogItem } from './types';
 import {
   getStoredTransactions,
   saveTransactionsToStorage,
   resetStoredTransactions,
+  getStoredProductCatalog,
+  saveProductCatalogToStorage,
+  resetProductCatalogToDefault,
 } from './utils/storage';
 import {
   initAuth,
@@ -26,11 +29,16 @@ import { StockForm } from './components/StockForm';
 import { StockTable } from './components/StockTable';
 import { HtmlCodeModal } from './components/HtmlCodeModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { ProductCatalogModal } from './components/ProductCatalogModal';
 
 export default function App() {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
+
+  // Product Catalog State
+  const [catalog, setCatalog] = useState<ProductCatalogItem[]>([]);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
 
   // Google Auth & Sheets Backend State
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -45,11 +53,27 @@ export default function App() {
   // Confirmation modal state for clearing all
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
 
-  // Load initial local data (starts empty as requested)
+  // Load initial local data (transactions and product catalog)
   useEffect(() => {
     const local = getStoredTransactions();
     setTransactions(local);
+
+    const storedCatalog = getStoredProductCatalog();
+    setCatalog(storedCatalog);
   }, []);
+
+  // Save updated catalog to storage & state
+  const handleSaveCatalog = (updatedCatalog: ProductCatalogItem[]) => {
+    setCatalog(updatedCatalog);
+    saveProductCatalogToStorage(updatedCatalog);
+  };
+
+  // Reset catalog to default sample list
+  const handleResetCatalog = () => {
+    const reset = resetProductCatalogToDefault();
+    setCatalog(reset);
+  };
+
 
   // Connect to Google Spreadsheet with an active token
   const connectToSpreadsheet = useCallback(async (authToken: string) => {
@@ -253,7 +277,9 @@ export default function App() {
       <Header
         onClearData={() => setIsClearAllModalOpen(true)}
         onOpenHtmlModal={() => setIsHtmlModalOpen(true)}
+        onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
         recordCount={transactions.length}
+        catalogCount={catalog.length}
         isGoogleConnected={Boolean(user && spreadsheetInfo)}
       />
 
@@ -284,6 +310,8 @@ export default function App() {
               onCancelEdit={() => setEditingTransaction(null)}
               isSaving={isSaving}
               isGoogleConnected={Boolean(user && spreadsheetInfo)}
+              catalog={catalog}
+              onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
             />
           </div>
 
@@ -320,6 +348,15 @@ export default function App() {
           </span>
         </div>
       </footer>
+
+      {/* Product Catalog Modal (Import & Manage Master Product List) */}
+      <ProductCatalogModal
+        isOpen={isCatalogModalOpen}
+        onClose={() => setIsCatalogModalOpen(false)}
+        catalog={catalog}
+        onSaveCatalog={handleSaveCatalog}
+        onResetCatalog={handleResetCatalog}
+      />
 
       {/* Standalone Single File HTML Code Modal */}
       <HtmlCodeModal

@@ -12,8 +12,11 @@ import {
   User,
   X,
   Loader2,
+  Sparkles,
+  Layers,
+  Settings,
 } from 'lucide-react';
-import { StockTransaction, TransactionType } from '../types';
+import { StockTransaction, TransactionType, ProductCatalogItem } from '../types';
 import { DEFAULT_CATEGORIES, DEFAULT_UNITS } from '../utils/storage';
 
 interface StockFormProps {
@@ -25,6 +28,8 @@ interface StockFormProps {
   onCancelEdit: () => void;
   isSaving?: boolean;
   isGoogleConnected?: boolean;
+  catalog?: ProductCatalogItem[];
+  onOpenCatalogModal?: () => void;
 }
 
 export function StockForm({
@@ -33,6 +38,8 @@ export function StockForm({
   onCancelEdit,
   isSaving = false,
   isGoogleConnected = false,
+  catalog = [],
+  onOpenCatalogModal,
 }: StockFormProps) {
   const today = new Date().toISOString().split('T')[0];
 
@@ -42,6 +49,9 @@ export function StockForm({
   const [customCategory, setCustomCategory] = useState<string>('');
   const [isCustomCategory, setIsCustomCategory] = useState<boolean>(false);
   const [productName, setProductName] = useState<string>('');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+  const [isManualInput, setIsManualInput] = useState<boolean>(false);
+  const [autoPriceNotice, setAutoPriceNotice] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('1');
   const [unit, setUnit] = useState<string>('ชิ้น');
   const [unitPrice, setUnitPrice] = useState<string>('');
@@ -50,6 +60,63 @@ export function StockForm({
 
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Auto-switch price when changing type between IN and OUT if a catalog product is chosen
+  const handleTypeChange = (newType: TransactionType) => {
+    setType(newType);
+    if (selectedCatalogId) {
+      const item = catalog.find((c) => c.id === selectedCatalogId);
+      if (item) {
+        if (newType === 'IN') {
+          const inPrice = item.costPrice !== undefined && item.costPrice > 0 ? item.costPrice : item.sellingPrice;
+          setUnitPrice(String(inPrice));
+          setAutoPriceNotice(`ดึงราคารับเข้าอัตโนมัติ: ฿${inPrice.toLocaleString('th-TH')}`);
+        } else {
+          setUnitPrice(String(item.sellingPrice));
+          setAutoPriceNotice(`ดึงราคาขายอัตโนมัติ: ฿${item.sellingPrice.toLocaleString('th-TH')}`);
+        }
+      }
+    }
+  };
+
+  // When a catalog item is chosen from the dropdown
+  const handleSelectCatalogProduct = (catalogId: string) => {
+    setSelectedCatalogId(catalogId);
+    if (!catalogId) {
+      setAutoPriceNotice('');
+      return;
+    }
+
+    const item = catalog.find((c) => c.id === catalogId);
+    if (!item) return;
+
+    // Auto-fill Product Name
+    setProductName(item.name);
+
+    // Auto-fill Category
+    if (DEFAULT_CATEGORIES.includes(item.category)) {
+      setCategory(item.category);
+      setIsCustomCategory(false);
+      setCustomCategory('');
+    } else {
+      setCategory('__CUSTOM__');
+      setIsCustomCategory(true);
+      setCustomCategory(item.category);
+    }
+
+    // Auto-fill Unit
+    setUnit(item.unit || 'ชิ้น');
+
+    // Auto-fill Price based on IN (cost) or OUT (sale)
+    if (type === 'IN') {
+      const inPrice = item.costPrice !== undefined && item.costPrice > 0 ? item.costPrice : item.sellingPrice;
+      setUnitPrice(String(inPrice));
+      setAutoPriceNotice(`ดึงราคารับเข้าอัตโนมัติ: ฿${inPrice.toLocaleString('th-TH')}`);
+    } else {
+      setUnitPrice(String(item.sellingPrice));
+      setAutoPriceNotice(`ดึงราคาขายอัตโนมัติ: ฿${item.sellingPrice.toLocaleString('th-TH')}`);
+    }
+  };
 
   // Populate form if editing
   useEffect(() => {
@@ -70,10 +137,22 @@ export function StockForm({
       setUnitPrice(String(editingTransaction.unitPrice));
       setReporter(editingTransaction.reporter);
       setNote(editingTransaction.note || '');
+
+      // Check if product exists in catalog
+      const matched = catalog.find(
+        (c) => c.name.trim().toLowerCase() === editingTransaction.productName.trim().toLowerCase()
+      );
+      if (matched) {
+        setSelectedCatalogId(matched.id);
+        setIsManualInput(false);
+      } else {
+        setIsManualInput(true);
+      }
+      setAutoPriceNotice('');
     } else {
       resetForm();
     }
-  }, [editingTransaction]);
+  }, [editingTransaction, catalog]);
 
   const resetForm = () => {
     setType('IN');
@@ -82,6 +161,8 @@ export function StockForm({
     setIsCustomCategory(false);
     setCustomCategory('');
     setProductName('');
+    setSelectedCatalogId('');
+    setAutoPriceNotice('');
     setQuantity('1');
     setUnit('ชิ้น');
     setUnitPrice('');
@@ -108,7 +189,7 @@ export function StockForm({
       return;
     }
     if (!productName.trim()) {
-      setErrorMsg('กรุณาระบุชื่อรายการสินค้า');
+      setErrorMsg('กรุณาระบุชื่อรายการสินค้า (เลือกจาก Dropdown หรือพิมพ์เอง)');
       return;
     }
     if (parsedQty <= 0) {
@@ -116,7 +197,7 @@ export function StockForm({
       return;
     }
     if (parsedPrice < 0) {
-      setErrorMsg('ราคาขายต้องไม่ติดลบ');
+      setErrorMsg('ราคาต่อหน่วยต้องไม่ติดลบ');
       return;
     }
     if (!reporter.trim()) {
@@ -146,6 +227,8 @@ export function StockForm({
 
       if (!editingTransaction) {
         setProductName('');
+        setSelectedCatalogId('');
+        setAutoPriceNotice('');
         setUnitPrice('');
         setQuantity('1');
         setNote('');
@@ -154,6 +237,19 @@ export function StockForm({
       setErrorMsg(err?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
   };
+
+  // Group catalog by category for nice optgroup in dropdown
+  const catalogByCategory = React.useMemo(() => {
+    const map = new Map<string, ProductCatalogItem[]>();
+    catalog.forEach((item) => {
+      const cat = item.category || 'สินค้าทั่วไป';
+      if (!map.has(cat)) {
+        map.set(cat, []);
+      }
+      map.get(cat)!.push(item);
+    });
+    return Array.from(map.entries());
+  }, [catalog]);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -183,7 +279,7 @@ export function StockForm({
                 </span>
               ) : (
                 <span className="text-[11px] text-slate-500">
-                  กรอกข้อมูลเพื่อบันทึกประวัติสต๊อก
+                  เลือกสินค้าจาก Dropdown หรือพิมพ์เอง
                 </span>
               )}
             </div>
@@ -231,7 +327,7 @@ export function StockForm({
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
-              onClick={() => setType('IN')}
+              onClick={() => handleTypeChange('IN')}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
                 type === 'IN'
                   ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
@@ -243,7 +339,7 @@ export function StockForm({
             </button>
             <button
               type="button"
-              onClick={() => setType('OUT')}
+              onClick={() => handleTypeChange('OUT')}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
                 type === 'OUT'
                   ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
@@ -275,7 +371,115 @@ export function StockForm({
           />
         </div>
 
-        {/* 3. กลุ่มที่ผลิตสินค้า */}
+        {/* 3. รายการสินค้า (DROPDOWN / MANUAL SELECT) */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label
+              htmlFor="stock-product"
+              className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+            >
+              <Package className="w-3.5 h-3.5 text-slate-400" />
+              รายการสินค้า <span className="text-rose-500">*</span>
+            </label>
+
+            <div className="flex items-center gap-2">
+              {/* Toggle Manual / Dropdown */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManualInput(!isManualInput);
+                  setAutoPriceNotice('');
+                }}
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium hover:underline flex items-center gap-1"
+              >
+                {isManualInput ? (
+                  <>
+                    <Layers className="w-3 h-3" />
+                    <span>ใช้ Dropdown เลือกสินค้า</span>
+                  </>
+                ) : (
+                  <>
+                    <span>พิมพ์ชื่อเอง</span>
+                  </>
+                )}
+              </button>
+
+              {/* Manage Catalog button */}
+              {onOpenCatalogModal && (
+                <button
+                  type="button"
+                  onClick={onOpenCatalogModal}
+                  className="text-[11px] text-slate-500 hover:text-indigo-600 flex items-center gap-0.5 bg-slate-100 hover:bg-indigo-50 px-1.5 py-0.5 rounded transition"
+                  title="จัดการหรือนำเข้าคลังสินค้าเดิมจาก Excel"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span className="hidden sm:inline">คลังสินค้า</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!isManualInput && catalog.length > 0 ? (
+            <div>
+              <select
+                id="stock-product-select"
+                value={selectedCatalogId}
+                onChange={(e) => handleSelectCatalogProduct(e.target.value)}
+                className="w-full text-xs px-3 py-2.5 border border-indigo-200 rounded-xl bg-indigo-50/20 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition text-slate-900 font-medium"
+              >
+                <option value="">-- แตะเพื่อเลือกสินค้าจากคลังสินค้า ({catalog.length} รายการ) --</option>
+                {catalogByCategory.map(([catName, items]) => (
+                  <optgroup key={catName} label={`กลุ่ม: ${catName}`}>
+                    {items.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code ? `[${item.code}] ` : ''}
+                        {item.name} (
+                        {type === 'IN'
+                          ? `รับเข้า ฿${(item.costPrice ?? item.sellingPrice).toLocaleString('th-TH')}`
+                          : `ราคาขาย ฿${item.sellingPrice.toLocaleString('th-TH')}`}
+                        /{item.unit})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+
+              {/* Quick info bar under dropdown */}
+              {selectedCatalogId && (
+                <div className="mt-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200/80 rounded-lg text-[11px] text-emerald-800 flex items-center justify-between">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+                    เลือก: {productName}
+                  </span>
+                  <span className="text-emerald-700 font-semibold">{autoPriceNotice}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <input
+                id="stock-product"
+                type="text"
+                required
+                placeholder="เช่น ข้าวเกรียบปลาอบกรอบ, ชาอัญชัน 300ml"
+                value={productName}
+                onChange={(e) => {
+                  setProductName(e.target.value);
+                  setSelectedCatalogId('');
+                  setAutoPriceNotice('');
+                }}
+                className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition bg-white"
+              />
+              {catalog.length === 0 && (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 แนะนำ: กดปุ่ม "คลังสินค้าหลัก" ที่แถบด้านบนเพื่อนำเข้าไฟล์ Excel/CSV หรือบันทึกสินค้าเดิม
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 4. กลุ่มที่ผลิตสินค้า */}
         <div>
           <label
             htmlFor="stock-category"
@@ -318,46 +522,41 @@ export function StockForm({
           )}
         </div>
 
-        {/* 4. รายการสินค้า */}
-        <div>
-          <label
-            htmlFor="stock-product"
-            className="text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5"
-          >
-            <Package className="w-3.5 h-3.5 text-slate-400" />
-            รายการสินค้า <span className="text-rose-500">*</span>
-          </label>
-          <input
-            id="stock-product"
-            type="text"
-            required
-            placeholder="เช่น ข้าวเกรียบปลาอบกรอบ, ชาอัญชัน 300ml"
-            value={productName}
-            onChange={(e) => setProductName(e.target.value)}
-            className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition bg-white"
-          />
-        </div>
-
-        {/* 5. ราคาขายต่อหน่วย & จำนวน & หน่วยนับ */}
+        {/* 5. ราคาต่อหน่วย (ขึ้นอัตโนมัติ) & จำนวน & หน่วยนับ */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label
-              htmlFor="stock-price"
-              className="block text-xs font-semibold text-slate-700 mb-1"
-            >
-              ราคาขาย/หน่วย (฿) <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="stock-price"
-              type="number"
-              min="0"
-              step="any"
-              required
-              placeholder="0.00"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition bg-white font-medium"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label
+                htmlFor="stock-price"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                {type === 'IN' ? 'ราคารับเข้า/หน่วย (฿)' : 'ราคาขาย/หน่วย (฿)'}{' '}
+                <span className="text-rose-500">*</span>
+              </label>
+            </div>
+            <div className="relative">
+              <input
+                id="stock-price"
+                type="number"
+                min="0"
+                step="any"
+                required
+                placeholder="0.00"
+                value={unitPrice}
+                onChange={(e) => {
+                  setUnitPrice(e.target.value);
+                  setAutoPriceNotice('');
+                }}
+                className={`w-full text-xs px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition bg-white font-semibold ${
+                  autoPriceNotice ? 'border-emerald-300 bg-emerald-50/30 text-emerald-900' : 'border-slate-200'
+                }`}
+              />
+            </div>
+            {autoPriceNotice && (
+              <span className="text-[10px] text-emerald-600 block mt-0.5">
+                ✓ ขึ้นราคาอัตโนมัติ (แก้ไขได้)
+              </span>
+            )}
           </div>
 
           <div>
@@ -487,3 +686,4 @@ export function StockForm({
     </div>
   );
 }
+

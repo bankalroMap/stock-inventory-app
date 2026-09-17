@@ -1,16 +1,20 @@
-import { Boxes, Code2, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Boxes, Code2, FileSpreadsheet, Trash2, PackagePlus } from 'lucide-react';
 
 interface HeaderProps {
   onClearData: () => void;
   onOpenHtmlModal: () => void;
+  onOpenCatalogModal: () => void;
   recordCount: number;
+  catalogCount: number;
   isGoogleConnected?: boolean;
 }
 
 export function Header({
   onClearData,
   onOpenHtmlModal,
+  onOpenCatalogModal,
   recordCount,
+  catalogCount,
   isGoogleConnected = false,
 }: HeaderProps) {
   return (
@@ -44,6 +48,21 @@ export function Header({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Manage Product Catalog / Import */}
+          <button
+            type="button"
+            onClick={onOpenCatalogModal}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition"
+            title="จัดการคลังสินค้าหลัก นำเข้าสินค้าเดิมจาก Excel เพื่อเลือกผ่าน Dropdown"
+            id="open-catalog-btn"
+          >
+            <PackagePlus className="w-4 h-4" />
+            <span>คลังสินค้าหลัก</span>
+            <span className="bg-indigo-700/80 px-1.5 py-0.2 rounded-full text-[10px]">
+              {catalogCount}
+            </span>
+          </button>
+
           {/* View Single-File HTML Code */}
           <button
             type="button"
@@ -75,3 +94,4 @@ export function Header({
     </header>
   );
 }
+

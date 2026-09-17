@@ -129,17 +129,37 @@ export function getStandaloneHtmlCode(): string {
               </select>
             </div>
 
-            <!-- รายการสินค้า -->
+            <!-- รายการสินค้า (เลือกจาก Dropdown หรือพิมพ์เอง) -->
             <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">รายการสินค้า <span class="text-rose-500">*</span></label>
-              <input type="text" id="productNameInput" placeholder="เช่น ชาอัญชันมะนาว 300ml" required class="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-medium text-slate-700">รายการสินค้า <span class="text-rose-500">*</span></label>
+                <button type="button" onclick="toggleStandaloneManualInput()" id="toggleInputModeBtn" class="text-[11px] text-indigo-600 hover:underline">
+                  พิมพ์ชื่อเอง
+                </button>
+              </div>
+
+              <!-- Dropdown เลือกสินค้า -->
+              <div id="productSelectWrapper">
+                <select id="productSelect" onchange="handleProductSelect(this.value)" class="w-full text-sm px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-indigo-50/20 font-medium">
+                  <option value="">-- เลือกรายการสินค้าจากคลัง --</option>
+                </select>
+                <div id="autoPriceBadge" class="hidden mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[11px] flex items-center justify-between">
+                  <span>✨ ดึงราคาอัตโนมัติ</span>
+                  <span id="autoPriceVal" class="font-bold"></span>
+                </div>
+              </div>
+
+              <!-- Input พิมพ์ชื่อเอง -->
+              <div id="productInputWrapper" class="hidden">
+                <input type="text" id="productNameInput" placeholder="เช่น ชาอัญชันมะนาว 300ml" class="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
             </div>
 
             <!-- ราคาขายต่อหน่วย และ จำนวน -->
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">ราคาขาย/หน่วย (฿) <span class="text-rose-500">*</span></label>
-                <input type="number" id="priceInput" min="0" step="0.5" placeholder="0.00" required class="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" oninput="calculateTotal()" />
+                <label id="priceLabel" class="block text-xs font-medium text-slate-700 mb-1">ราคารับเข้า/หน่วย (฿) <span class="text-rose-500">*</span></label>
+                <input type="number" id="priceInput" min="0" step="0.5" placeholder="0.00" required class="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold" oninput="calculateTotal()" />
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-700 mb-1">จำนวน <span class="text-rose-500">*</span></label>
@@ -229,9 +249,118 @@ export function getStandaloneHtmlCode(): string {
 
   <script>
     const STORAGE_KEY = 'STOCK_IN_OUT_INVENTORY_V1';
+    const CATALOG_KEY = 'STOCK_PRODUCT_CATALOG_V1';
 
-    // ข้อมูลเริ่มต้นแบบโล่งสะอาด (Clean state)
-    const initialMock = [];
+    // แคตตาล็อกสินค้าตั้งต้น
+    const initialCatalog = [
+      { id: '1', name: 'กระเป๋าสานกระจูด ลายพิกุล', category: 'กระจูดรายา', unit: 'ใบ', costPrice: 320, sellingPrice: 450 },
+      { id: '2', name: 'หมวกสานกระจูด สไตล์วินเทจ', category: 'กระจูดรายา', unit: 'ใบ', costPrice: 180, sellingPrice: 280 },
+      { id: '3', name: 'ตะกร้ากระจูดใส่เอกสาร A4', category: 'กระจูด Change', unit: 'ใบ', costPrice: 220, sellingPrice: 350 },
+      { id: '4', name: 'น้ำผึ้งชันโรงแท้ 100% (250ml)', category: 'น้ำผึ้งชันโรงบ้านไพรวัน', unit: 'ขวด', costPrice: 250, sellingPrice: 390 },
+      { id: '5', name: 'ผ้าคลุมไหล่ทอมือ ย้อมสีธรรมชาติ', category: 'ผ้าทอตอหลัง', unit: 'ผืน', costPrice: 480, sellingPrice: 690 },
+      { id: '6', name: 'เรือกอและจำลอง 12 นิ้ว (ลงสีลายกนก)', category: 'เรือกอและจำลอง', unit: 'ลำ', costPrice: 850, sellingPrice: 1250 }
+    ];
+
+    let isManualMode = false;
+
+    function getCatalog() {
+      const raw = localStorage.getItem(CATALOG_KEY);
+      if (!raw) return initialCatalog;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : initialCatalog;
+      } catch (e) {
+        return initialCatalog;
+      }
+    }
+
+    function populateProductDropdown() {
+      const catalog = getCatalog();
+      const select = document.getElementById('productSelect');
+      select.innerHTML = '<option value="">-- เลือกรายการสินค้าจากคลัง (' + catalog.length + ' รายการ) --</option>';
+
+      // จัดกลุ่มตาม category
+      const groups = {};
+      catalog.forEach(item => {
+        const cat = item.category || 'สินค้าทั่วไป';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+      });
+
+      Object.entries(groups).forEach(([cat, items]) => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = 'กลุ่ม: ' + cat;
+        items.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.id;
+          opt.textContent = item.name + ' (ขาย ฿' + item.sellingPrice + ' | ทุน ฿' + item.costPrice + ')';
+          optgroup.appendChild(opt);
+        });
+        select.appendChild(optgroup);
+      });
+    }
+
+    function toggleStandaloneManualInput() {
+      isManualMode = !isManualMode;
+      const selectWrap = document.getElementById('productSelectWrapper');
+      const inputWrap = document.getElementById('productInputWrapper');
+      const btn = document.getElementById('toggleInputModeBtn');
+
+      if (isManualMode) {
+        selectWrap.classList.add('hidden');
+        inputWrap.classList.remove('hidden');
+        btn.textContent = 'เลือกจาก Dropdown';
+        document.getElementById('productNameInput').focus();
+      } else {
+        selectWrap.classList.remove('hidden');
+        inputWrap.classList.add('hidden');
+        btn.textContent = 'พิมพ์ชื่อเอง';
+      }
+    }
+
+    function handleProductSelect(catalogId) {
+      const badge = document.getElementById('autoPriceBadge');
+      const valSpan = document.getElementById('autoPriceVal');
+      if (!catalogId) {
+        badge.classList.add('hidden');
+        return;
+      }
+      const catalog = getCatalog();
+      const item = catalog.find(p => p.id === catalogId);
+      if (!item) return;
+
+      // เลือกกลุ่มอัตโนมัติ
+      const categoryInput = document.getElementById('categoryInput');
+      categoryInput.value = item.category;
+
+      // กรอกชื่อสินค้า
+      document.getElementById('productNameInput').value = item.name;
+
+      // ดึงราคาอัตโนมัติ ตาม IN หรือ OUT
+      const type = document.querySelector('input[name="type"]:checked').value;
+      const price = type === 'IN' ? (item.costPrice || item.sellingPrice) : item.sellingPrice;
+      document.getElementById('priceInput').value = price;
+
+      badge.classList.remove('hidden');
+      valSpan.textContent = '฿' + price + ' / ' + (item.unit || 'ชิ้น');
+      calculateTotal();
+    }
+
+    // เมื่อเปลี่ยนประเภท IN หรือ OUT ให้อัปเดตป้ายราคาและราคาอัตโนมัติถ้าเลือกสินค้าอยู่
+    function onTypeChanged() {
+      const type = document.querySelector('input[name="type"]:checked').value;
+      const priceLabel = document.getElementById('priceLabel');
+      if (type === 'IN') {
+        priceLabel.innerHTML = 'ราคารับเข้า/หน่วย (฿) <span class="text-rose-500">*</span>';
+      } else {
+        priceLabel.innerHTML = 'ราคาขาย/หน่วย (฿) <span class="text-rose-500">*</span>';
+      }
+
+      const select = document.getElementById('productSelect');
+      if (select && select.value) {
+        handleProductSelect(select.value);
+      }
+    }
 
     // โหลดข้อมูลจาก LocalStorage
     function getStoredData() {
@@ -273,7 +402,21 @@ export function getStandaloneHtmlCode(): string {
       const type = document.querySelector('input[name="type"]:checked').value;
       const date = document.getElementById('dateInput').value;
       const category = document.getElementById('categoryInput').value;
-      const productName = document.getElementById('productNameInput').value.trim();
+
+      let productName = '';
+      if (isManualMode) {
+        productName = document.getElementById('productNameInput').value.trim();
+      } else {
+        const selId = document.getElementById('productSelect').value;
+        const item = getCatalog().find(p => p.id === selId);
+        productName = item ? item.name : document.getElementById('productNameInput').value.trim();
+      }
+
+      if (!productName) {
+        alert('กรุณาเลือกสินค้าจาก Dropdown หรือพิมพ์ชื่อสินค้า');
+        return;
+      }
+
       const unitPrice = parseFloat(document.getElementById('priceInput').value) || 0;
       const quantity = parseInt(document.getElementById('quantityInput').value) || 1;
       const reporter = document.getElementById('reporterInput').value.trim();
@@ -296,6 +439,8 @@ export function getStandaloneHtmlCode(): string {
 
       // รีเซ็ตฟอร์ม (คงวันที่และผู้แจ้งไว้เพื่อความสะดวก)
       document.getElementById('productNameInput').value = '';
+      document.getElementById('productSelect').value = '';
+      document.getElementById('autoPriceBadge').classList.add('hidden');
       document.getElementById('priceInput').value = '';
       document.getElementById('quantityInput').value = '1';
       calculateTotal();
@@ -389,6 +534,8 @@ export function getStandaloneHtmlCode(): string {
       // ใส่วันที่ปัจจุบันเป็นค่าตั้งต้น
       document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
       document.getElementById('quantityInput').value = '1';
+      populateProductDropdown();
+      onTypeChanged();
       renderTable();
       renderStats();
     });
