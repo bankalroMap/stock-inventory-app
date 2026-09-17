@@ -37,8 +37,13 @@ import { MonitorDashboard } from './components/MonitorDashboard';
 import { HtmlCodeModal } from './components/HtmlCodeModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
+import { LoginScreen } from './components/LoginScreen';
+import { AppUser, getStoredAppUser, clearAppUser } from './utils/auth';
 
 export default function App() {
+  // Authentication & Access Protection State
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => getStoredAppUser());
+
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -421,6 +426,16 @@ export default function App() {
     }
   };
 
+  const handleLogout = () => {
+    clearAppUser();
+    setCurrentUser(null);
+  };
+
+  // If not logged in, require credentials first to prevent unauthorized tampering
+  if (!currentUser) {
+    return <LoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-500 selection:text-white">
       {/* Top Header */}
@@ -433,6 +448,8 @@ export default function App() {
         isGoogleConnected={Boolean(user && spreadsheetInfo)}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Content */}
@@ -553,6 +570,7 @@ export default function App() {
                 catalog={catalog}
                 onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
                 prefillProduct={prefillProduct}
+                currentUser={currentUser}
               />
             </div>
 
