@@ -1,4 +1,5 @@
 import { StockTransaction, ProductCatalogItem } from '../types';
+import { calculateProductInventory } from '../utils/inventory';
 
 export const STOCK_SHEET_TITLE = 'สต๊อกสินค้า';
 export const CATALOG_SHEET_TITLE = 'คลังสินค้า';
@@ -32,9 +33,12 @@ export const CATALOG_TABLE_HEADERS = [
   'รหัสสินค้า (SKU)',
   'ชื่อรายการสินค้า',
   'กลุ่มที่ผลิตสินค้า',
+  'จำนวนคงเหลือในคลัง',
+  'หน่วยนับ',
+  'สถานะสินค้า',
   'ราคาทุน/รับเข้า (บาท)',
   'ราคาขาย (บาท)',
-  'หน่วยนับ',
+  'มูลค่าสต๊อกคงเหลือ (บาท)',
   'หมายเหตุ',
 ];
 
@@ -581,7 +585,7 @@ export async function createCatalogSheet(
 }
 
 /**
- * Ensure header row exists in the catalog sheet
+ * Ensure header row exists in the catalog sheet with remaining stock and status columns
  */
 export async function ensureCatalogHeaders(
   accessToken: string,
@@ -592,22 +596,27 @@ export async function ensureCatalogHeaders(
     const checkRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
         sheetTitle
-      )}!A1:G1`,
+      )}!A1:J1`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
     if (checkRes.ok) {
       const data = await checkRes.json();
-      if (data.values && data.values.length > 0 && data.values[0].length >= 3) {
-        return; // Headers exist
+      if (
+        data.values &&
+        data.values.length > 0 &&
+        data.values[0].length >= 8 &&
+        String(data.values[0][3] || '').includes('คงเหลือ')
+      ) {
+        return; // Headers are already up-to-date with remaining stock column
       }
     }
 
     await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
         sheetTitle
-      )}!A1:G1?valueInputOption=USER_ENTERED`,
+      )}!A1:J1?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
         headers: {
@@ -626,13 +635,14 @@ export async function ensureCatalogHeaders(
 
 /**
  * Fetch product catalog items from the 'คลังสินค้า' sheet
+ * Supports both new 10-column layout (with stock balance) and legacy 7-column layout.
  */
 export async function fetchCatalogFromSheet(
   accessToken: string,
   spreadsheetId: string,
   sheetTitle: string = CATALOG_SHEET_TITLE
 ): Promise<ProductCatalogItem[]> {
-  const range = `${encodeURIComponent(sheetTitle)}!A2:G`;
+  const range = `${encodeURIComponent(sheetTitle)}!A1:J`;
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
     {
@@ -646,11 +656,18 @@ export async function fetchCatalogFromSheet(
   }
 
   const data = await res.json();
-  const rows = data.values || [];
+  const allRows = data.values || [];
+  if (allRows.length <= 1) return [];
+
+  const headerRow = allRows[0] || [];
+  const isNewLayout =
+    String(headerRow[3] || '').includes('คงเหลือ') || headerRow.length >= 8;
+
+  const dataRows = allRows.slice(1);
   const catalog: ProductCatalogItem[] = [];
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
     if (!row || row.length === 0) continue;
 
     const rawCode = String(row[0] || '').trim();
@@ -666,44 +683,72 @@ export async function fetchCatalogFromSheet(
     if (!name) continue;
 
     const category = String(row[2] || 'ทั่วไป').trim();
-    const costPrice = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
-    const sellingPrice =
-      parseFloat(String(row[4] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
-    const unit = String(row[5] || 'ชิ้น').trim();
-    const note = String(row[6] || '').trim();
 
-    catalog.push({
-      id: code || `PRD-${1000 + i}`,
-      code: code || `PRD-${1000 + i}`,
-      name,
-      category,
-      costPrice,
-      sellingPrice,
-      unit: unit || 'ชิ้น',
-      note: note || undefined,
-    });
+    if (isNewLayout) {
+      // New layout:
+      // A: SKU, B: Name, C: Category, D: Remaining Stock, E: Unit, F: Status, G: Cost, H: Selling, I: Total Value, J: Note
+      const stockVal = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
+      const unit = String(row[4] || 'ชิ้น').trim();
+      const costPrice = parseFloat(String(row[6] || '0').replace(/[^0-9.-]+/g, '')) || 0;
+      const sellingPrice =
+        parseFloat(String(row[7] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
+      const note = String(row[9] || '').trim();
+
+      catalog.push({
+        id: code || `PRD-${1000 + i}`,
+        code: code || `PRD-${1000 + i}`,
+        name,
+        category,
+        costPrice,
+        sellingPrice,
+        unit: unit || 'ชิ้น',
+        initialStock: stockVal,
+        note: note || undefined,
+      });
+    } else {
+      // Legacy layout:
+      // A: SKU, B: Name, C: Category, D: Cost, E: Selling, F: Unit, G: Note
+      const costPrice = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
+      const sellingPrice =
+        parseFloat(String(row[4] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
+      const unit = String(row[5] || 'ชิ้น').trim();
+      const note = String(row[6] || '').trim();
+
+      catalog.push({
+        id: code || `PRD-${1000 + i}`,
+        code: code || `PRD-${1000 + i}`,
+        name,
+        category,
+        costPrice,
+        sellingPrice,
+        unit: unit || 'ชิ้น',
+        note: note || undefined,
+      });
+    }
   }
 
   return catalog;
 }
 
 /**
- * Save/replace all product catalog items to the 'คลังสินค้า' sheet on Google Sheets
+ * Save/replace all product catalog items to the 'คลังสินค้า' sheet on Google Sheets,
+ * automatically calculating remaining stock and product status.
  */
 export async function saveCatalogToSheet(
   accessToken: string,
   spreadsheetId: string,
   catalog: ProductCatalogItem[],
+  transactions: StockTransaction[] = [],
   sheetTitle: string = CATALOG_SHEET_TITLE
 ): Promise<void> {
   // Ensure catalog headers first
   await ensureCatalogHeaders(accessToken, spreadsheetId, sheetTitle);
 
-  // Clear existing catalog data rows (A2:G)
+  // Clear existing catalog data rows (A2:J)
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
       sheetTitle
-    )}!A2:G:clear`,
+    )}!A2:J:clear`,
     {
       method: 'POST',
       headers: {
@@ -715,17 +760,23 @@ export async function saveCatalogToSheet(
 
   if (catalog.length === 0) return;
 
-  const rows = catalog.map((item, idx) => [
-    item.code || item.id || `PRD-${1000 + idx}`,
-    item.name,
-    item.category || 'ทั่วไป',
-    item.costPrice ?? 0,
-    item.sellingPrice,
-    item.unit || 'ชิ้น',
-    item.note || '',
-  ]);
+  const rows = catalog.map((item, idx) => {
+    const inv = calculateProductInventory(item, transactions);
+    return [
+      item.code || item.id || `PRD-${1000 + idx}`,
+      item.name,
+      item.category || 'ทั่วไป',
+      inv.currentStock, // จำนวนคงเหลือในคลัง
+      item.unit || 'ชิ้น',
+      inv.statusLabel, // สถานะสินค้า (สินค้าปกติ / สต๊อกต่ำ / DeadStock / สินค้าหมด)
+      item.costPrice ?? 0,
+      item.sellingPrice,
+      inv.totalStockValue, // มูลค่าสต๊อกคงเหลือ (บาท)
+      item.note || '',
+    ];
+  });
 
-  const range = `${encodeURIComponent(sheetTitle)}!A2:G?valueInputOption=USER_ENTERED`;
+  const range = `${encodeURIComponent(sheetTitle)}!A2:J?valueInputOption=USER_ENTERED`;
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
     {

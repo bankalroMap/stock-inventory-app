@@ -30,6 +30,7 @@ interface StockFormProps {
   isGoogleConnected?: boolean;
   catalog?: ProductCatalogItem[];
   onOpenCatalogModal?: () => void;
+  prefillProduct?: { name: string; type: TransactionType; timestamp: number } | null;
 }
 
 export function StockForm({
@@ -40,6 +41,7 @@ export function StockForm({
   isGoogleConnected = false,
   catalog = [],
   onOpenCatalogModal,
+  prefillProduct,
 }: StockFormProps) {
   const today = new Date().toISOString().split('T')[0];
 
@@ -153,6 +155,52 @@ export function StockForm({
       resetForm();
     }
   }, [editingTransaction, catalog]);
+
+  // Handle prefill from inventory table action buttons (+ รับเข้า / - จ่ายออก)
+  useEffect(() => {
+    if (!prefillProduct) return;
+
+    setType(prefillProduct.type);
+    const matched = catalog.find(
+      (c) => c.name.trim().toLowerCase() === prefillProduct.name.trim().toLowerCase()
+    );
+
+    if (matched) {
+      setSelectedCatalogId(matched.id);
+      setIsManualInput(false);
+      setProductName(matched.name);
+      if (DEFAULT_CATEGORIES.includes(matched.category)) {
+        setCategory(matched.category);
+        setIsCustomCategory(false);
+        setCustomCategory('');
+      } else {
+        setCategory('__CUSTOM__');
+        setIsCustomCategory(true);
+        setCustomCategory(matched.category);
+      }
+      setUnit(matched.unit || 'ชิ้น');
+
+      if (prefillProduct.type === 'IN') {
+        const inPrice =
+          matched.costPrice !== undefined && matched.costPrice > 0
+            ? matched.costPrice
+            : matched.sellingPrice;
+        setUnitPrice(String(inPrice));
+        setAutoPriceNotice(`ดึงราคารับเข้าอัตโนมัติ: ฿${inPrice.toLocaleString('th-TH')}`);
+      } else {
+        setUnitPrice(String(matched.sellingPrice));
+        setAutoPriceNotice(`ดึงราคาขายอัตโนมัติ: ฿${matched.sellingPrice.toLocaleString('th-TH')}`);
+      }
+    } else {
+      setSelectedCatalogId('');
+      setIsManualInput(true);
+      setProductName(prefillProduct.name);
+      setAutoPriceNotice('');
+    }
+
+    setQuantity('1');
+    setErrorMsg('');
+  }, [prefillProduct, catalog]);
 
   const resetForm = () => {
     setType('IN');

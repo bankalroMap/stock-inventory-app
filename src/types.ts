@@ -41,3 +41,26 @@ export interface ProductCatalogItem {
   initialStock?: number; // จำนวนสต๊อกยกมา
   note?: string; // รายละเอียดเพิ่มเติม
 }
+
+export type ProductStockStatus = 'NORMAL' | 'LOW_STOCK' | 'DEAD_STOCK' | 'OUT_OF_STOCK';
+
+export interface ProductInventorySummary {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  costPrice: number;
+  sellingPrice: number;
+  unit: string;
+  totalIn: number;
+  totalOut: number;
+  currentStock: number; // จำนวนคงเหลือในคลัง
+  totalStockValue: number; // มูลค่าสต๊อกคงเหลือ (บาท)
+  status: ProductStockStatus;
+  statusLabel: string; // 'สินค้าปกติ' | 'สต๊อกต่ำ' | 'DeadStock' | 'สินค้าหมด'
+  firstInDate?: string;
+  lastInDate?: string;
+  lastOutDate?: string;
+  daysWithoutSale?: number; // จำนวนวันที่ขายไม่ออก
+  note?: string;
+}

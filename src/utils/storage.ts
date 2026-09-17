@@ -22,7 +22,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ชิ้น',
     sellingPrice: 350,
     costPrice: 220,
-    initialStock: 25,
+    initialStock: 0,
   },
   {
     id: 'PROD-002',
@@ -32,7 +32,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ชิ้น',
     sellingPrice: 190,
     costPrice: 120,
-    initialStock: 40,
+    initialStock: 0,
   },
   {
     id: 'PROD-003',
@@ -42,7 +42,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ชิ้น',
     sellingPrice: 280,
     costPrice: 180,
-    initialStock: 30,
+    initialStock: 0,
   },
   {
     id: 'PROD-004',
@@ -52,7 +52,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ชิ้น',
     sellingPrice: 450,
     costPrice: 290,
-    initialStock: 15,
+    initialStock: 0,
   },
   {
     id: 'PROD-005',
@@ -62,7 +62,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ขวด',
     sellingPrice: 390,
     costPrice: 260,
-    initialStock: 50,
+    initialStock: 0,
   },
   {
     id: 'PROD-006',
@@ -72,7 +72,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ก้อน',
     sellingPrice: 85,
     costPrice: 45,
-    initialStock: 80,
+    initialStock: 0,
   },
   {
     id: 'PROD-007',
@@ -82,7 +82,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ผืน',
     sellingPrice: 550,
     costPrice: 350,
-    initialStock: 20,
+    initialStock: 0,
   },
   {
     id: 'PROD-008',
@@ -92,7 +92,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ผืน',
     sellingPrice: 690,
     costPrice: 450,
-    initialStock: 12,
+    initialStock: 0,
   },
   {
     id: 'PROD-009',
@@ -102,7 +102,7 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ลำ',
     sellingPrice: 1200,
     costPrice: 750,
-    initialStock: 10,
+    initialStock: 0,
   },
   {
     id: 'PROD-010',
@@ -112,26 +112,192 @@ export const INITIAL_PRODUCT_CATALOG: ProductCatalogItem[] = [
     unit: 'ลำ',
     sellingPrice: 2500,
     costPrice: 1600,
-    initialStock: 5,
+    initialStock: 0,
   },
 ];
 
-export const INITIAL_MOCK_TRANSACTIONS: StockTransaction[] = [];
+export const INITIAL_MOCK_TRANSACTIONS: StockTransaction[] = [
+  // 1. DeadStock sample: เรือกอและจำลอง (IN 46 days ago, sold 39 days ago, 8 left stalled)
+  {
+    id: 'TX-1001',
+    date: '2026-08-01',
+    type: 'IN',
+    category: 'เรือกอและจำลอง',
+    productName: 'เรือกอและจำลอง ขนาด 10 นิ้ว (ไม้สัก)',
+    quantity: 10,
+    unit: 'ลำ',
+    unitPrice: 750,
+    totalPrice: 7500,
+    reporter: 'มานะ ช่างไม้',
+    note: 'รับเข้าสต๊อกต้นเดือน สภาพสมบูรณ์',
+    createdAt: '2026-08-01T09:00:00.000Z',
+  },
+  {
+    id: 'TX-1002',
+    date: '2026-08-08',
+    type: 'OUT',
+    category: 'เรือกอและจำลอง',
+    productName: 'เรือกอและจำลอง ขนาด 10 นิ้ว (ไม้สัก)',
+    quantity: 2,
+    unit: 'ลำ',
+    unitPrice: 1200,
+    totalPrice: 2400,
+    reporter: 'สมศรี จัดส่ง',
+    note: 'จำหน่ายให้ศูนย์วัฒนธรรม',
+    createdAt: '2026-08-08T14:30:00.000Z',
+  },
+  // 2. DeadStock sample: ซองใส่เอกสารกระจูด A4 (IN 50 days ago, 0 sold)
+  {
+    id: 'TX-1003',
+    date: '2026-07-28',
+    type: 'IN',
+    category: 'กระจูดรายา',
+    productName: 'ซองใส่เอกสารกระจูด A4',
+    quantity: 15,
+    unit: 'ชิ้น',
+    unitPrice: 120,
+    totalPrice: 1800,
+    reporter: 'สมศักดิ์ คลัง',
+    note: 'รับเข้าจากกลุ่มสานกระจูดรายา',
+    createdAt: '2026-07-28T10:00:00.000Z',
+  },
+  // 3. สต๊อกต่ำ sample: หมวกกระจูดปีกกว้าง Change (IN 8, OUT 5 -> เหลือ 3 ชิ้น < 5)
+  {
+    id: 'TX-1004',
+    date: '2026-09-08',
+    type: 'IN',
+    category: 'กระจูด Change',
+    productName: 'หมวกกระจูดปีกกว้าง Change',
+    quantity: 8,
+    unit: 'ชิ้น',
+    unitPrice: 180,
+    totalPrice: 1440,
+    reporter: 'อรทัย ฝ่ายผลิต',
+    note: 'รับเข้าชุดใหม่',
+    createdAt: '2026-09-08T09:15:00.000Z',
+  },
+  {
+    id: 'TX-1005',
+    date: '2026-09-14',
+    type: 'OUT',
+    category: 'กระจูด Change',
+    productName: 'หมวกกระจูดปีกกว้าง Change',
+    quantity: 5,
+    unit: 'ชิ้น',
+    unitPrice: 280,
+    totalPrice: 1400,
+    reporter: 'สมศรี จัดส่ง',
+    note: 'ลูกค้าหน้าร้านซื้อเหมา',
+    createdAt: '2026-09-14T11:00:00.000Z',
+  },
+  // 4. สินค้าปกติ sample: น้ำผึ้งชันโรงแท้ 100% (IN 50, OUT 10 -> เหลือ 40 ขวด >= 5)
+  {
+    id: 'TX-1006',
+    date: '2026-09-02',
+    type: 'IN',
+    category: 'น้ำผึ้งชันโรงบ้านไพรวัน',
+    productName: 'น้ำผึ้งชันโรงแท้ 100% (250 มล.)',
+    quantity: 50,
+    unit: 'ขวด',
+    unitPrice: 260,
+    totalPrice: 13000,
+    reporter: 'เกษม ไพรวัน',
+    note: 'รอบเก็บเกี่ยวน้ำผึ้งเดือน 8',
+    createdAt: '2026-09-02T08:30:00.000Z',
+  },
+  {
+    id: 'TX-1007',
+    date: '2026-09-15',
+    type: 'OUT',
+    category: 'น้ำผึ้งชันโรงบ้านไพรวัน',
+    productName: 'น้ำผึ้งชันโรงแท้ 100% (250 มล.)',
+    quantity: 10,
+    unit: 'ขวด',
+    unitPrice: 390,
+    totalPrice: 3900,
+    reporter: 'วิชัย ตัวแทน',
+    note: 'ส่งสาขาตัวแทนจำหน่าย',
+    createdAt: '2026-09-15T15:00:00.000Z',
+  },
+  // 5. สินค้าปกติ sample: กระเป๋ากระจูดทรงโท้ท ลายริ้ว (IN 30, OUT 6 -> เหลือ 24 ชิ้น >= 5)
+  {
+    id: 'TX-1008',
+    date: '2026-09-07',
+    type: 'IN',
+    category: 'กระจูดรายา',
+    productName: 'กระเป๋ากระจูดทรงโท้ท ลายริ้ว',
+    quantity: 30,
+    unit: 'ชิ้น',
+    unitPrice: 220,
+    totalPrice: 6600,
+    reporter: 'สมศักดิ์ คลัง',
+    note: 'รับเข้ากระจูดลายริ้วล็อตล่าสุด',
+    createdAt: '2026-09-07T10:20:00.000Z',
+  },
+  {
+    id: 'TX-1009',
+    date: '2026-09-14',
+    type: 'OUT',
+    category: 'กระจูดรายา',
+    productName: 'กระเป๋ากระจูดทรงโท้ท ลายริ้ว',
+    quantity: 6,
+    unit: 'ชิ้น',
+    unitPrice: 350,
+    totalPrice: 2100,
+    reporter: 'สมศรี จัดส่ง',
+    note: 'ออเดอร์ออนไลน์ Shopee/TikTok',
+    createdAt: '2026-09-14T16:45:00.000Z',
+  },
+  // 6. สินค้าหมด sample: กระเป๋าสะพายกระจูดร่วมสมัย (IN 10, OUT 10 -> เหลือ 0 ชิ้น)
+  {
+    id: 'TX-1010',
+    date: '2026-09-03',
+    type: 'IN',
+    category: 'กระจูด Change',
+    productName: 'กระเป๋าสะพายกระจูดร่วมสมัย',
+    quantity: 10,
+    unit: 'ชิ้น',
+    unitPrice: 290,
+    totalPrice: 2900,
+    reporter: 'อรทัย ฝ่ายผลิต',
+    note: 'รุ่นลิมิเต็ด ผลิต 10 ใบ',
+    createdAt: '2026-09-03T11:00:00.000Z',
+  },
+  {
+    id: 'TX-1011',
+    date: '2026-09-12',
+    type: 'OUT',
+    category: 'กระจูด Change',
+    productName: 'กระเป๋าสะพายกระจูดร่วมสมัย',
+    quantity: 10,
+    unit: 'ชิ้น',
+    unitPrice: 450,
+    totalPrice: 4500,
+    reporter: 'สมศรี จัดส่ง',
+    note: 'ลูกค้าเหมาหมดล็อตไปจัดนิทรรศการ',
+    createdAt: '2026-09-12T13:20:00.000Z',
+  },
+];
 
 export function getStoredTransactions(): StockTransaction[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return [];
+      saveTransactionsToStorage(INITIAL_MOCK_TRANSACTIONS);
+      return INITIAL_MOCK_TRANSACTIONS;
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      if (parsed.length === 0) {
+        saveTransactionsToStorage(INITIAL_MOCK_TRANSACTIONS);
+        return INITIAL_MOCK_TRANSACTIONS;
+      }
       return parsed;
     }
-    return [];
+    return INITIAL_MOCK_TRANSACTIONS;
   } catch (err) {
     console.error('Failed to parse localStorage data:', err);
-    return [];
+    return INITIAL_MOCK_TRANSACTIONS;
   }
 }
 
@@ -145,11 +311,11 @@ export function saveTransactionsToStorage(transactions: StockTransaction[]): voi
 
 export function resetStoredTransactions(): StockTransaction[] {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    return [];
+    saveTransactionsToStorage(INITIAL_MOCK_TRANSACTIONS);
+    return INITIAL_MOCK_TRANSACTIONS;
   } catch (err) {
     console.error('Failed to reset localStorage:', err);
-    return [];
+    return INITIAL_MOCK_TRANSACTIONS;
   }
 }
 
