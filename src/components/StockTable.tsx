@@ -10,10 +10,12 @@ import {
   Inbox,
   Search,
   Trash2,
+  Eye,
 } from 'lucide-react';
 import { StockTransaction } from '../types';
 import { DEFAULT_CATEGORIES } from '../utils/storage';
 import { ConfirmModal } from './ConfirmModal';
+import { AppUser } from '../utils/auth';
 
 interface StockTableProps {
   transactions: StockTransaction[];
@@ -21,6 +23,7 @@ interface StockTableProps {
   onEdit: (transaction: StockTransaction) => void;
   isGoogleConnected?: boolean;
   isDeleting?: boolean;
+  currentUser?: AppUser | null;
 }
 
 type SortField = 'date' | 'productName' | 'quantity' | 'totalPrice';
@@ -32,7 +35,9 @@ export function StockTable({
   onEdit,
   isGoogleConnected = false,
   isDeleting = false,
+  currentUser,
 }: StockTableProps) {
+  const isViewer = currentUser?.role === 'viewer';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -345,22 +350,32 @@ export function StockTable({
                     {item.reporter}
                   </td>
                   <td className="py-3 px-3 text-center whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => onEdit(item)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
-                        title="แก้ไขรายการ"
+                    {isViewer ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-slate-400 bg-slate-50 border border-slate-200 select-none"
+                        title="สิทธิ์ผู้เข้าชม (ดูอย่างเดียว ไม่สามารถแก้ไขหรือลบได้)"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(item.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                        title="ลบรายการ"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                        <Eye className="w-3 h-3 text-slate-400" />
+                        <span>ดูอย่างเดียว</span>
+                      </span>
+                    ) : (
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => onEdit(item)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                          title="แก้ไขรายการ"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(item.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          title="ลบรายการ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

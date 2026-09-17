@@ -205,6 +205,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 const isSelected = username.toLowerCase() === acc.id.toLowerCase();
                 const isSuperAdmin = acc.role === 'superadmin';
                 const isAdmin = acc.role === 'admin';
+                const isViewer = acc.role === 'viewer';
 
                 return (
                   <button
@@ -215,28 +216,52 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                       isSelected
                         ? isSuperAdmin
                           ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                          : isViewer
+                          ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
                           : 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                         : isSuperAdmin
                         ? 'bg-amber-50/80 hover:bg-amber-100/80 text-amber-900 border-amber-300 font-semibold'
+                        : isViewer
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                     }`}
                     title={`คลิกเพื่อใส่ ID: ${acc.id} (${acc.name} - ${acc.role})`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        isSuperAdmin ? 'bg-amber-500 ring-1 ring-amber-300' : isAdmin ? 'bg-rose-500' : 'bg-emerald-500'
+                        isSuperAdmin
+                          ? 'bg-amber-500 ring-1 ring-amber-300'
+                          : isAdmin
+                          ? 'bg-rose-500'
+                          : isViewer
+                          ? 'bg-slate-400'
+                          : 'bg-emerald-500'
                       }`}
                     />
                     <span className="font-semibold">{acc.id}</span>
                     {isSuperAdmin && <span className="text-[10px]">⭐</span>}
+                    {isViewer && (
+                      <span
+                        className={`text-[9px] px-1 py-0.2 rounded font-normal ${
+                          isSelected ? 'bg-slate-800 text-slate-200' : 'bg-slate-200/80 text-slate-600'
+                        }`}
+                      >
+                        ดูอย่างเดียว
+                      </span>
+                    )}
                     {isSelected && <Check className="w-3 h-3 ml-0.5" />}
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-slate-400 mt-2 text-center">
-              รหัสผ่านเริ่มต้นสำหรับทุกบัญชีคือ: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">1234</code>
-            </p>
+            <div className="mt-2.5 pt-2 border-t border-slate-100/80 text-[11px] text-slate-500 space-y-1 text-center">
+              <p>
+                รหัสผ่านเริ่มต้นสำหรับทุกบัญชีคือ: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">1234</code>
+              </p>
+              <p className="text-[10px] text-slate-400">
+                🔒 kititorn, prasert, sulkiflee, kanyakorn, ple มีสิทธิ์เป็น <span className="font-semibold text-slate-600">ผู้เข้าชม (ดูอย่างเดียว)</span> ไม่สามารถบันทึกสต๊อกได้
+              </p>
+            </div>
           </div>
         </div>
 

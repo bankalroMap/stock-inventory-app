@@ -283,6 +283,7 @@ export function UserManagementModal({
               <option value="superadmin">Super Admin</option>
               <option value="admin">Admin</option>
               <option value="staff">Staff</option>
+              <option value="viewer">Viewer (ดูอย่างเดียว)</option>
             </select>
           </div>
 
@@ -384,6 +385,7 @@ export function UserManagementModal({
                     onChange={(e) => setNewRole(e.target.value as UserRole)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-hidden font-semibold text-slate-800"
                   >
+                    <option value="viewer">Viewer (ผู้เข้าชม - ดูอย่างเดียว)</option>
                     <option value="staff">Staff (บันทึกสต๊อก เข้า-ออก)</option>
                     <option value="admin">Admin (ผู้ดูแลระบบสต๊อก)</option>
                     <option value="superadmin">Super Admin (จัดการสิทธิ์ผู้ใช้)</option>
@@ -482,6 +484,7 @@ export function UserManagementModal({
                     onChange={(e) => setEditRole(e.target.value as UserRole)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-hidden font-semibold text-slate-800"
                   >
+                    <option value="viewer">Viewer (ผู้เข้าชม - ดูอย่างเดียว)</option>
                     <option value="staff">Staff (บันทึกสต๊อก เข้า-ออก)</option>
                     <option value="admin">Admin (ผู้ดูแลระบบสต๊อก)</option>
                     <option value="superadmin">Super Admin (จัดการสิทธิ์ผู้ใช้)</option>
@@ -493,6 +496,7 @@ export function UserManagementModal({
                     {editRole === 'superadmin' && '⭐ ได้รับสิทธิ์สูงสุด จัดการผู้ใช้งานและสต๊อกได้ทุกอย่าง'}
                     {editRole === 'admin' && '🛡️ ได้รับสิทธิ์ผู้ดูแลสต๊อก ล้างข้อมูล เชื่อมต่อ Google Sheets'}
                     {editRole === 'staff' && '📦 ได้รับสิทธิ์พนักงาน บันทึกรับเข้า-จ่ายออก ตรวจสอบสต๊อก'}
+                    {editRole === 'viewer' && '👁️ ได้รับสิทธิ์ผู้เข้าชม ดูข้อมูลและรายงานได้อย่างเดียว ไม่สามารถบันทึก เข้า-ออก'}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -639,7 +643,7 @@ export function UserManagementModal({
               <Key className="w-3.5 h-3.5 text-amber-600" />
               <span>สรุปสิทธิ์ของแต่ละบทบาทในระบบ:</span>
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
               <div className="p-3 bg-white rounded-xl border border-amber-200">
                 <span className="font-bold text-amber-800 block mb-1">⭐ Super Admin</span>
                 <span className="text-slate-600">
@@ -656,6 +660,12 @@ export function UserManagementModal({
                 <span className="font-bold text-emerald-800 block mb-1">📦 Staff</span>
                 <span className="text-slate-600">
                   พนักงานประจำ ทำหน้าที่บันทึกรับเข้า-จ่ายออก ค้นหาสินค้า และดูยอดสต๊อกคงเหลือในคลัง
+                </span>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-slate-300">
+                <span className="font-bold text-slate-700 block mb-1">👁️ Viewer (ผู้เข้าชม)</span>
+                <span className="text-slate-600">
+                  เข้าชมแอป ดูรายงาน ยอดคงเหลือและสถานะสินค้า แต่ไม่สามารถบันทึก เข้า-ออก หรือแก้ไขข้อมูลใดๆ ได้
                 </span>
               </div>
             </div>

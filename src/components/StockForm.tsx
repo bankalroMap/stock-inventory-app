@@ -15,6 +15,8 @@ import {
   Sparkles,
   Layers,
   Settings,
+  Lock,
+  Eye,
 } from 'lucide-react';
 import { StockTransaction, TransactionType, ProductCatalogItem } from '../types';
 import { DEFAULT_CATEGORIES, DEFAULT_UNITS } from '../utils/storage';
@@ -233,9 +235,16 @@ export function StockForm({
   const parsedPrice = Math.max(0, parseFloat(unitPrice) || 0);
   const totalPrice = parsedQty * parsedPrice;
 
+  const isViewer = currentUser?.role === 'viewer';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+
+    if (isViewer) {
+      setErrorMsg('บัญชีของคุณอยู่ในสิทธิ์ "ผู้เข้าชม" (Viewer) เท่านั้น ไม่สามารถบันทึกรับเข้าหรือจ่ายออกสต๊อกสินค้าได้');
+      return;
+    }
 
     const finalCategory = isCustomCategory ? customCategory.trim() : category;
 
@@ -357,6 +366,24 @@ export function StockForm({
       </div>
 
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {/* Viewer Only Notice Banner */}
+        {isViewer && (
+          <div className="p-3.5 bg-slate-100 border border-slate-300/90 rounded-xl text-slate-800 text-xs flex items-start gap-2.5">
+            <div className="p-1 rounded-lg bg-slate-200 text-slate-700 shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                <span>โหมดผู้เข้าชม (Viewer Only)</span>
+                <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-300">ดูอย่างเดียว</span>
+              </p>
+              <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
+                บัญชีของคุณ (<strong>{currentUser?.id}</strong>) มีสิทธิ์เป็นผู้เข้าชมเท่านั้น ไม่สามารถบันทึกรับเข้า-จ่ายออก หรือแก้ไขข้อมูลใดๆ ในคลังสินค้าได้
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Error Alert */}
         {errorMsg && (
           <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
@@ -722,15 +749,24 @@ export function StockForm({
         <div className="pt-2 flex items-center gap-2">
           <button
             type="submit"
-            disabled={isSaving}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-white font-medium text-xs flex items-center justify-center gap-2 shadow-xs transition-all disabled:opacity-60 ${
-              type === 'IN'
-                ? 'bg-emerald-600 hover:bg-emerald-700'
-                : 'bg-rose-600 hover:bg-rose-700'
+            disabled={isSaving || isViewer}
+            className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-xs flex items-center justify-center gap-2 shadow-xs transition-all ${
+              isViewer
+                ? 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed'
+                : isSaving
+                ? 'bg-slate-400 text-white cursor-wait opacity-70'
+                : type === 'IN'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-rose-600 hover:bg-rose-700 text-white'
             }`}
             id="submit-stock-btn"
           >
-            {isSaving ? (
+            {isViewer ? (
+              <>
+                <Lock className="w-4 h-4 text-slate-500" />
+                <span>เฉพาะผู้เข้าชม (ไม่มีสิทธิ์บันทึก)</span>
+              </>
+            ) : isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>กำลังบันทึกลง Google Sheets...</span>

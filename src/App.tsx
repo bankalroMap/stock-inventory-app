@@ -309,6 +309,11 @@ export default function App() {
     data: Omit<StockTransaction, 'id' | 'createdAt'>,
     idToUpdate?: string
   ): Promise<boolean> => {
+    if (currentUser?.role === 'viewer') {
+      setSheetError('บัญชีของคุณอยู่ในสิทธิ์ "ผู้เข้าชม" (Viewer) เท่านั้น ไม่สามารถบันทึกรับเข้าหรือจ่ายออกสต๊อกสินค้าได้');
+      return false;
+    }
+
     setIsSaving(true);
     setSheetError(null);
 
@@ -372,6 +377,11 @@ export default function App() {
 
   // Delete transaction with confirmation
   const handleDeleteTransaction = async (id: string) => {
+    if (currentUser?.role === 'viewer') {
+      setSheetError('บัญชีของคุณอยู่ในสิทธิ์ "ผู้เข้าชม" (Viewer) เท่านั้น ไม่สามารถลบข้อมูลสต๊อกสินค้าได้');
+      return;
+    }
+
     setIsDeleting(true);
     setSheetError(null);
 
@@ -586,6 +596,7 @@ export default function App() {
                   onSelectProductForTransaction={handleSelectProductFromInventory}
                   onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
                   isGoogleConnected={Boolean(user && spreadsheetInfo)}
+                  currentUser={currentUser}
                 />
               ) : (
                 <StockTable
@@ -599,6 +610,7 @@ export default function App() {
                   }}
                   isGoogleConnected={Boolean(user && spreadsheetInfo)}
                   isDeleting={isDeleting}
+                  currentUser={currentUser}
                 />
               )}
             </div>

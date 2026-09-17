@@ -121,7 +121,7 @@ export function Header({
           </button>
 
           {/* Clear Data (if records exist) */}
-          {recordCount > 0 && (
+          {recordCount > 0 && currentUser?.role !== 'viewer' && (
             <button
               type="button"
               onClick={onClearData}
@@ -153,6 +153,8 @@ export function Header({
                       <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded border border-amber-200">SuperAdmin</span>
                     ) : currentUser.role === 'admin' ? (
                       <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.2 rounded border border-rose-200">Admin</span>
+                    ) : currentUser.role === 'viewer' ? (
+                      <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-300">Viewer</span>
                     ) : (
                       <UserCheck className="w-3 h-3 text-emerald-600" />
                     )}

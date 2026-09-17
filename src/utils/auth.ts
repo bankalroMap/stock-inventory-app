@@ -1,4 +1,4 @@
-export type UserRole = 'superadmin' | 'admin' | 'staff';
+export type UserRole = 'superadmin' | 'admin' | 'staff' | 'viewer';
 
 export interface AppUser {
   id: string;
@@ -36,6 +36,12 @@ export const ROLE_LABELS: Record<UserRole, { label: string; desc: string; badgeC
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 font-medium',
     dotClass: 'bg-emerald-500',
   },
+  viewer: {
+    label: 'Viewer (ผู้เข้าชม - ดูอย่างเดียว)',
+    desc: 'เข้าชมและตรวจสอบสต๊อกคงเหลือและสถานะสินค้า ไม่สามารถบันทึกรับเข้า-จ่ายออกได้',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 font-medium',
+    dotClass: 'bg-slate-400',
+  },
 };
 
 /**
@@ -60,21 +66,21 @@ export const INITIAL_ACCOUNTS: AuthCredential[] = [
     id: 'kititorn',
     password: '1234',
     name: 'คุณกิตติธร (kititorn)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-indigo-500 text-white',
   },
   {
     id: 'prasert',
     password: '1234',
     name: 'คุณประเสริฐ (prasert)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-emerald-500 text-white',
   },
   {
     id: 'sulkiflee',
     password: '1234',
     name: 'คุณซุลกิฟลี (sulkiflee)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-amber-500 text-white',
   },
   {
@@ -88,38 +94,50 @@ export const INITIAL_ACCOUNTS: AuthCredential[] = [
     id: 'kanyakorn',
     password: '1234',
     name: 'คุณกัญญากร (kanyakorn)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-purple-500 text-white',
   },
   {
     id: 'ple',
     password: '1234',
     name: 'คุณเปิ้ล (ple)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-pink-500 text-white',
   },
 ];
 
-const ACCOUNTS_STORAGE_KEY = 'stock_manager_accounts_v2';
+const ACCOUNTS_STORAGE_KEY = 'stock_manager_accounts_v3';
 const APP_USER_SESSION_KEY = 'stock_manager_active_user';
+
+// รายชื่อ ID บัญชีที่เป็นผู้เข้าชมแอปอย่างเดียว (ไม่สามารถบันทึกเข้า-ออกได้)
+export const READONLY_VIEWER_IDS = new Set(['kititorn', 'prasert', 'sulkiflee', 'kanyakorn', 'ple']);
 
 /**
  * ดึงรายการบัญชีผู้ใช้ทั้งหมดจาก localStorage
  */
 export function getAccounts(): AuthCredential[] {
   try {
-    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY) || localStorage.getItem('stock_manager_accounts_v2');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // อัปเดตบทบาทของ kititorn, prasert, sulkiflee, kanyakorn, ple ให้เป็น viewer ตามคำสั่ง
+        const normalizedList: AuthCredential[] = parsed.map((acc: AuthCredential) => {
+          if (READONLY_VIEWER_IDS.has(acc.id.toLowerCase())) {
+            return {
+              ...acc,
+              role: 'viewer' as UserRole,
+            };
+          }
+          return acc;
+        });
+
         // ตรวจสอบว่ามี superadmin อยู่ในระบบหรือไม่ หากยังไม่มีให้แทรกบัญชี superadmin เข้าไป
-        const hasSuperAdmin = parsed.some((a) => a.role === 'superadmin' || a.id.toLowerCase() === 'superadmin');
-        if (!hasSuperAdmin) {
-          const merged = [INITIAL_ACCOUNTS[0], ...parsed];
-          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
+        const hasSuperAdmin = normalizedList.some((a) => a.role === 'superadmin' || a.id.toLowerCase() === 'superadmin');
+        const finalAccounts = hasSuperAdmin ? normalizedList : [INITIAL_ACCOUNTS[0], ...normalizedList];
+        
+        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(finalAccounts));
+        return finalAccounts;
       }
     }
   } catch (e) {
@@ -352,6 +370,7 @@ export function clearAppUser(): void {
 export function getRandomAvatarBg(role: UserRole): string {
   if (role === 'superadmin') return 'bg-amber-600 text-white';
   if (role === 'admin') return 'bg-rose-500 text-white';
+  if (role === 'viewer') return 'bg-slate-600 text-white';
 
   const staffColors = [
     'bg-indigo-500 text-white',
