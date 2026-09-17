@@ -298,9 +298,9 @@ export function StockForm({
             className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition bg-white text-slate-800"
           >
             <option value="">-- เลือกกลุ่มที่ผลิตสินค้า --</option>
-            {DEFAULT_CATEGORIES.map((cat) => (
+            {DEFAULT_CATEGORIES.map((cat, idx) => (
               <option key={cat} value={cat}>
-                {cat}
+                {idx + 1}. {cat}
               </option>
             ))}
             <option value="__CUSTOM__">+ กำหนดกลุ่มใหม่เอง...</option>

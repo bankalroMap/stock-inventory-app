@@ -121,12 +121,11 @@ export function getStandaloneHtmlCode(): string {
               <label class="block text-xs font-medium text-slate-700 mb-1">กลุ่มที่ผลิตสินค้า <span class="text-rose-500">*</span></label>
               <select id="categoryInput" required class="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
                 <option value="">-- เลือกกลุ่มที่ผลิตสินค้า --</option>
-                <option value="กลุ่มเกษตรแปรรูป">กลุ่มเกษตรแปรรูป</option>
-                <option value="กลุ่มเครื่องดื่มสมุนไพร">กลุ่มเครื่องดื่มสมุนไพร</option>
-                <option value="กลุ่มเบเกอรี่ & ขนมหวาน">กลุ่มเบเกอรี่ & ขนมหวาน</option>
-                <option value="กลุ่มหัตถกรรม & สิ่งทอ">กลุ่มหัตถกรรม & สิ่งทอ</option>
-                <option value="กลุ่มเวชสำอางธรรมชาติ">กลุ่มเวชสำอางธรรมชาติ</option>
-                <option value="กลุ่มอาหารพร้อมทาน">กลุ่มอาหารพร้อมทาน</option>
+                <option value="กระจูดรายา">1. กระจูดรายา</option>
+                <option value="กระจูด Change">2. กระจูด Change</option>
+                <option value="น้ำผึ้งชันโรงบ้านไพรวัน">3. น้ำผึ้งชันโรงบ้านไพรวัน</option>
+                <option value="ผ้าทอตอหลัง">4. ผ้าทอตอหลัง</option>
+                <option value="เรือกอและจำลอง">5. เรือกอและจำลอง</option>
               </select>
             </div>
 

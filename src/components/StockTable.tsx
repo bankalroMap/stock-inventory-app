@@ -12,6 +12,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { StockTransaction } from '../types';
+import { DEFAULT_CATEGORIES } from '../utils/storage';
 import { ConfirmModal } from './ConfirmModal';
 
 interface StockTableProps {
@@ -41,7 +42,7 @@ export function StockTable({
 
   // Extract all categories present
   const categories = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(DEFAULT_CATEGORIES);
     transactions.forEach((t) => {
       if (t.category) set.add(t.category);
     });
