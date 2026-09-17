@@ -107,3 +107,19 @@
   background-color: #303030;
   opacity: 8%;
 }
+
+/* Custom slim scrollbar for table mouse scrolling */
+.custom-table-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-table-scrollbar::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

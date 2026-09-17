@@ -241,35 +241,35 @@ export function StockTable({
         onCancel={() => setDeleteConfirmId(null)}
       />
 
-      {/* Data Table */}
-      <div className="overflow-x-auto">
+      {/* Data Table (Scrollable max 5 rows) */}
+      <div className="overflow-x-auto overflow-y-auto max-h-[355px] custom-table-scrollbar border-b border-slate-200">
         <table className="w-full text-left text-xs text-slate-600">
-          <thead className="bg-slate-50/80 text-slate-700 uppercase tracking-wider border-b border-slate-200 font-semibold">
-            <tr>
+          <thead className="sticky top-0 z-10 bg-slate-50 text-slate-700 uppercase tracking-wider border-b border-slate-200 font-semibold shadow-2xs">
+            <tr className="bg-slate-50">
               <th
                 onClick={() => handleSort('date')}
-                className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition whitespace-nowrap"
+                className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition whitespace-nowrap bg-slate-50 sticky top-0"
               >
                 <div className="flex items-center gap-1">
                   <span>วันที่</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-3 whitespace-nowrap">ประเภท</th>
-              <th className="py-3 px-3 whitespace-nowrap">กลุ่มที่ผลิต</th>
+              <th className="py-3 px-3 whitespace-nowrap bg-slate-50 sticky top-0">ประเภท</th>
+              <th className="py-3 px-3 whitespace-nowrap bg-slate-50 sticky top-0">กลุ่มที่ผลิต</th>
               <th
                 onClick={() => handleSort('productName')}
-                className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition"
+                className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition bg-slate-50 sticky top-0"
               >
                 <div className="flex items-center gap-1">
                   <span>รายการสินค้า</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">ราคาขาย</th>
+              <th className="py-3 px-3 text-right whitespace-nowrap bg-slate-50 sticky top-0">ราคาขาย</th>
               <th
                 onClick={() => handleSort('quantity')}
-                className="py-3 px-3.5 text-right cursor-pointer hover:bg-slate-100 transition whitespace-nowrap"
+                className="py-3 px-3.5 text-right cursor-pointer hover:bg-slate-100 transition whitespace-nowrap bg-slate-50 sticky top-0"
               >
                 <div className="flex items-center justify-end gap-1">
                   <span>จำนวน</span>
@@ -278,15 +278,15 @@ export function StockTable({
               </th>
               <th
                 onClick={() => handleSort('totalPrice')}
-                className="py-3 px-3.5 text-right cursor-pointer hover:bg-slate-100 transition whitespace-nowrap"
+                className="py-3 px-3.5 text-right cursor-pointer hover:bg-slate-100 transition whitespace-nowrap bg-slate-50 sticky top-0"
               >
                 <div className="flex items-center justify-end gap-1">
                   <span>ราคารวม</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-3 whitespace-nowrap">ผู้แจ้ง</th>
-              <th className="py-3 px-3 text-center whitespace-nowrap">จัดการ</th>
+              <th className="py-3 px-3 whitespace-nowrap bg-slate-50 sticky top-0">ผู้แจ้ง</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap bg-slate-50 sticky top-0">จัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

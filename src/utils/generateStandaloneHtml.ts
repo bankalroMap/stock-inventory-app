@@ -214,10 +214,10 @@ export function getStandaloneHtmlCode(): string {
             </div>
           </div>
 
-          <!-- ตาราง -->
-          <div class="overflow-x-auto mt-4">
+          <!-- ตาราง (เลื่อนเมาส์ scroll ได้ไม่ยาวเกินไป) -->
+          <div class="overflow-x-auto overflow-y-auto max-h-[350px] mt-4 border-b border-slate-200">
             <table class="w-full text-left text-sm text-slate-600">
-              <thead class="bg-slate-50 text-slate-700 text-xs font-semibold uppercase tracking-wider border-y border-slate-200">
+              <thead class="bg-slate-50 text-slate-700 text-xs font-semibold uppercase tracking-wider border-y border-slate-200 sticky top-0 z-10 shadow-2xs">
                 <tr>
                   <th class="py-3 px-3">วันที่</th>
                   <th class="py-3 px-3">ประเภท</th>

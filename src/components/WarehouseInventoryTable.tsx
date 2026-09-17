@@ -199,6 +199,12 @@ export function WarehouseInventoryTable({
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                 {inventoryList.length} รายการ
               </span>
+              {filteredItems.length > 5 && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                  แสดง 5 ลำดับแรก (เลื่อนเมาส์เพื่อดูต่อ)
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-1">
               แสดงยอดคงเหลือเรียลไทม์ พร้อมระบบแจ้งเตือน <strong>สินค้าปกติ</strong>, <strong>สต๊อกต่ำ</strong> (&lt;5 ชิ้น), <strong>DeadStock</strong> (ขายไม่ออก 30 วัน), และ <strong>สินค้าหมด</strong>
@@ -391,14 +397,14 @@ export function WarehouseInventoryTable({
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="overflow-x-auto">
+      {/* Main Table (Max 5 rows visible with smooth mouse scrolling) */}
+      <div className="overflow-x-auto overflow-y-auto max-h-[355px] custom-table-scrollbar border-b border-slate-200">
         <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold">
-              <th className="py-3 px-4 w-12 text-center">#</th>
+          <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
+            <tr className="bg-slate-50 text-slate-600 font-semibold">
+              <th className="py-3 px-4 w-12 text-center bg-slate-50 sticky top-0">#</th>
               <th
-                className="py-3 px-4 cursor-pointer hover:text-slate-900 select-none"
+                className="py-3 px-4 cursor-pointer hover:text-slate-900 select-none bg-slate-50 sticky top-0"
                 onClick={() => handleSort('name')}
               >
                 <div className="flex items-center gap-1.5">
@@ -406,9 +412,9 @@ export function WarehouseInventoryTable({
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-3">กลุ่มที่ผลิต</th>
+              <th className="py-3 px-3 bg-slate-50 sticky top-0">กลุ่มที่ผลิต</th>
               <th
-                className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 select-none"
+                className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 select-none bg-slate-50 sticky top-0"
                 onClick={() => handleSort('status')}
               >
                 <div className="flex items-center justify-center gap-1.5">
@@ -417,7 +423,7 @@ export function WarehouseInventoryTable({
                 </div>
               </th>
               <th
-                className="py-3 px-3 text-right cursor-pointer hover:text-slate-900 select-none"
+                className="py-3 px-3 text-right cursor-pointer hover:text-slate-900 select-none bg-slate-50 sticky top-0"
                 onClick={() => handleSort('currentStock')}
               >
                 <div className="flex items-center justify-end gap-1.5">
@@ -425,10 +431,10 @@ export function WarehouseInventoryTable({
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-3 text-right">รับเข้า / จ่ายออก</th>
-              <th className="py-3 px-3 text-right">ราคาทุน / ขาย</th>
+              <th className="py-3 px-3 text-right bg-slate-50 sticky top-0">รับเข้า / จ่ายออก</th>
+              <th className="py-3 px-3 text-right bg-slate-50 sticky top-0">ราคาทุน / ขาย</th>
               <th
-                className="py-3 px-3 text-right cursor-pointer hover:text-slate-900 select-none"
+                className="py-3 px-3 text-right cursor-pointer hover:text-slate-900 select-none bg-slate-50 sticky top-0"
                 onClick={() => handleSort('totalStockValue')}
               >
                 <div className="flex items-center justify-end gap-1.5">
@@ -437,7 +443,7 @@ export function WarehouseInventoryTable({
                 </div>
               </th>
               <th
-                className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 select-none"
+                className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 select-none bg-slate-50 sticky top-0"
                 onClick={() => handleSort('daysWithoutSale')}
               >
                 <div className="flex items-center justify-center gap-1.5">
@@ -445,7 +451,7 @@ export function WarehouseInventoryTable({
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-4 text-center">บันทึกด่วน</th>
+              <th className="py-3 px-4 text-center bg-slate-50 sticky top-0">บันทึกด่วน</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -654,6 +660,11 @@ export function WarehouseInventoryTable({
           <div>
             มูลค่าสต๊อกรวม: <strong className="text-slate-800 font-mono">฿{counts.totalStockValue.toLocaleString('th-TH')}</strong>
           </div>
+          {filteredItems.length > 5 && (
+            <div className="text-[11px] text-slate-400 font-normal">
+              (แสดงครั้งละ 5 ลำดับ &bull; เลื่อนเมาส์บนตารางเพื่อดูครบทั้ง {filteredItems.length} รายการ)
+            </div>
+          )}
         </div>
 
         {isGoogleConnected && (
