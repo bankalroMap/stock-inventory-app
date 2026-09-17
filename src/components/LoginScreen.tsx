@@ -259,7 +259,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 รหัสผ่านเริ่มต้นสำหรับทุกบัญชีคือ: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">1234</code>
               </p>
               <p className="text-[10px] text-slate-400">
-                🔒 kititorn, prasert, sulkiflee, kanyakorn, ple มีสิทธิ์เป็น <span className="font-semibold text-slate-600">ผู้เข้าชม (ดูอย่างเดียว)</span> ไม่สามารถบันทึกสต๊อกได้
+                🔒 kititorn, prasert, sulkiflee, adisak, kanyakorn, ple มีสิทธิ์เป็น <span className="font-semibold text-slate-600">ผู้เข้าชม (ดูอย่างเดียว)</span> ไม่สามารถบันทึกสต๊อกได้
               </p>
             </div>
           </div>

@@ -87,7 +87,7 @@ export const INITIAL_ACCOUNTS: AuthCredential[] = [
     id: 'adisak',
     password: '1234',
     name: 'คุณอดิศักดิ์ (adisak)',
-    role: 'staff',
+    role: 'viewer',
     avatarBg: 'bg-cyan-500 text-white',
   },
   {
@@ -110,7 +110,7 @@ const ACCOUNTS_STORAGE_KEY = 'stock_manager_accounts_v3';
 const APP_USER_SESSION_KEY = 'stock_manager_active_user';
 
 // รายชื่อ ID บัญชีที่เป็นผู้เข้าชมแอปอย่างเดียว (ไม่สามารถบันทึกเข้า-ออกได้)
-export const READONLY_VIEWER_IDS = new Set(['kititorn', 'prasert', 'sulkiflee', 'kanyakorn', 'ple']);
+export const READONLY_VIEWER_IDS = new Set(['kititorn', 'prasert', 'sulkiflee', 'adisak', 'kanyakorn', 'ple']);
 
 /**
  * ดึงรายการบัญชีผู้ใช้ทั้งหมดจาก localStorage
