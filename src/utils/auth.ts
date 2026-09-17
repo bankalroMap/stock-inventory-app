@@ -109,9 +109,6 @@ export const INITIAL_ACCOUNTS: AuthCredential[] = [
 const ACCOUNTS_STORAGE_KEY = 'stock_manager_accounts_v3';
 const APP_USER_SESSION_KEY = 'stock_manager_active_user';
 
-// รายชื่อ ID บัญชีที่เป็นผู้เข้าชมแอปอย่างเดียว (ไม่สามารถบันทึกเข้า-ออกได้)
-export const READONLY_VIEWER_IDS = new Set(['kititorn', 'prasert', 'sulkiflee', 'adisak', 'kanyakorn', 'ple']);
-
 /**
  * ดึงรายการบัญชีผู้ใช้ทั้งหมดจาก localStorage
  */
@@ -121,22 +118,32 @@ export function getAccounts(): AuthCredential[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // อัปเดตบทบาทของ kititorn, prasert, sulkiflee, kanyakorn, ple ให้เป็น viewer ตามคำสั่ง
-        const normalizedList: AuthCredential[] = parsed.map((acc: AuthCredential) => {
-          if (READONLY_VIEWER_IDS.has(acc.id.toLowerCase())) {
-            return {
-              ...acc,
-              role: 'viewer' as UserRole,
-            };
+        // ตรวจสอบความถูกต้องของบัญชี และรักษาสิทธิ์บทบาทที่ Super Admin ได้แก้ไขหรือกำหนดไว้
+        const accountMap = new Map<string, AuthCredential>();
+        
+        parsed.forEach((acc: AuthCredential) => {
+          if (acc && typeof acc.id === 'string' && acc.id.trim()) {
+            accountMap.set(acc.id.toLowerCase().trim(), acc);
           }
-          return acc;
         });
 
         // ตรวจสอบว่ามี superadmin อยู่ในระบบหรือไม่ หากยังไม่มีให้แทรกบัญชี superadmin เข้าไป
-        const hasSuperAdmin = normalizedList.some((a) => a.role === 'superadmin' || a.id.toLowerCase() === 'superadmin');
-        const finalAccounts = hasSuperAdmin ? normalizedList : [INITIAL_ACCOUNTS[0], ...normalizedList];
-        
-        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(finalAccounts));
+        const hasSuperAdmin = Array.from(accountMap.values()).some(
+          (a) => a.role === 'superadmin' || a.id.toLowerCase() === 'superadmin'
+        );
+        if (!hasSuperAdmin) {
+          accountMap.set('superadmin', INITIAL_ACCOUNTS[0]);
+        }
+
+        // ตรวจสอบว่ามีบัญชีพื้นฐานครบหรือไม่ หากยังขาดบัญชีใดให้เพิ่มเข้าไป
+        INITIAL_ACCOUNTS.forEach((initAcc) => {
+          const key = initAcc.id.toLowerCase().trim();
+          if (!accountMap.has(key)) {
+            accountMap.set(key, initAcc);
+          }
+        });
+
+        const finalAccounts = Array.from(accountMap.values());
         return finalAccounts;
       }
     }
@@ -144,7 +151,7 @@ export function getAccounts(): AuthCredential[] {
     console.warn('Error reading accounts from storage:', e);
   }
 
-  // กำหนดค่าเริ่มต้นและบันทึกลง localStorage
+  // กำหนดค่าเริ่มต้นและบันทึกลง localStorage หากยังไม่มีข้อมูล
   try {
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
   } catch (e) {
