@@ -1,0 +1,6 @@
+{
+  "name": "ระบบบันทึกสต๊อกสินค้า เข้า-ออก",
+  "description": "ระบบบันทึกสต๊อกสินค้า เข้า-ออก พร้อมฟอร์มบันทึก ตารางประวัติ และจัดเก็บบน Google Sheets เป็นระบบหลังบ้าน",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

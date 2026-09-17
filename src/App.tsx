@@ -1,0 +1,344 @@
+import { useState, useEffect, useCallback } from 'react';
+import { User } from 'firebase/auth';
+import { StockTransaction } from './types';
+import {
+  getStoredTransactions,
+  saveTransactionsToStorage,
+  resetStoredTransactions,
+} from './utils/storage';
+import {
+  initAuth,
+  googleSignIn,
+  logout,
+  getAccessToken,
+} from './services/firebaseAuth';
+import {
+  findOrCreateStockSpreadsheet,
+  fetchTransactionsFromSheet,
+  appendTransactionToSheet,
+  updateTransactionInSheet,
+  deleteTransactionFromSheet,
+  SpreadsheetInfo,
+} from './services/googleSheets';
+import { Header } from './components/Header';
+import { GoogleSheetsBar } from './components/GoogleSheetsBar';
+import { StatsCards } from './components/StatsCards';
+import { StockForm } from './components/StockForm';
+import { StockTable } from './components/StockTable';
+import { HtmlCodeModal } from './components/HtmlCodeModal';
+import { ConfirmModal } from './components/ConfirmModal';
+
+export default function App() {
+  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
+  const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
+  const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
+
+  // Google Auth & Sheets Backend State
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(null);
+  const [isConnectingSheet, setIsConnectingSheet] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+
+  // Confirmation modal state for clearing all
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+
+  // Load initial local data (starts empty as requested)
+  useEffect(() => {
+    const local = getStoredTransactions();
+    setTransactions(local);
+  }, []);
+
+  // Connect to Google Spreadsheet with an active token
+  const connectToSpreadsheet = useCallback(async (authToken: string) => {
+    setIsConnectingSheet(true);
+    setSheetError(null);
+    try {
+      const sheet = await findOrCreateStockSpreadsheet(authToken);
+      setSpreadsheetInfo(sheet);
+
+      // Fetch live data from sheet
+      setIsSyncing(true);
+      try {
+        const remoteData = await fetchTransactionsFromSheet(authToken, sheet.id);
+        setTransactions(remoteData);
+        saveTransactionsToStorage(remoteData);
+      } catch (fetchErr: any) {
+        console.warn('Initial sheet fetch:', fetchErr);
+      } finally {
+        setIsSyncing(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to initialize Google Sheet:', err);
+      setSheetError(err?.message || 'ไม่สามารถเชื่อมต่อ Google Sheets ได้');
+    } finally {
+      setIsConnectingSheet(false);
+    }
+  }, []);
+
+  // Initialize Firebase Auth listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (authedUser, accessToken) => {
+        setUser(authedUser);
+        setToken(accessToken);
+        connectToSpreadsheet(accessToken);
+      },
+      () => {
+        setUser(null);
+        setToken(null);
+        setSpreadsheetInfo(null);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [connectToSpreadsheet]);
+
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
+    setIsConnectingSheet(true);
+    setSheetError(null);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setToken(res.accessToken);
+        await connectToSpreadsheet(res.accessToken);
+      }
+    } catch (err: any) {
+      console.error('Google Sign-In Failed:', err);
+      setSheetError(err?.message || 'การเข้าสู่ระบบด้วย Google ไม่สำเร็จ');
+    } finally {
+      setIsConnectingSheet(false);
+    }
+  };
+
+  // Handle Sign-Out
+  const handleSignOut = async () => {
+    try {
+      await logout();
+      setUser(null);
+      setToken(null);
+      setSpreadsheetInfo(null);
+    } catch (err: any) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  // Sync / Refresh data from Google Sheets
+  const handleSyncData = async () => {
+    const activeToken = token || (await getAccessToken());
+    if (!activeToken || !spreadsheetInfo) {
+      setSheetError('กรุณาลงชื่อเข้าใช้ Google เพื่อซิงค์ข้อมูล');
+      return;
+    }
+
+    setIsSyncing(true);
+    setSheetError(null);
+    try {
+      const remote = await fetchTransactionsFromSheet(activeToken, spreadsheetInfo.id);
+      setTransactions(remote);
+      saveTransactionsToStorage(remote);
+    } catch (err: any) {
+      console.error('Sync error:', err);
+      setSheetError(err?.message || 'ซิงค์ข้อมูลจาก Google Sheets ไม่สำเร็จ');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Save transaction (Create or Update)
+  const handleSaveTransaction = async (
+    data: Omit<StockTransaction, 'id' | 'createdAt'>,
+    idToUpdate?: string
+  ): Promise<boolean> => {
+    setIsSaving(true);
+    setSheetError(null);
+
+    const activeToken = token || (await getAccessToken());
+
+    try {
+      if (idToUpdate) {
+        // Update existing item
+        const existing = transactions.find((t) => t.id === idToUpdate);
+        const updatedItem: StockTransaction = {
+          ...data,
+          id: idToUpdate,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+        };
+
+        // If connected to Google Sheets, update remote row
+        if (activeToken && spreadsheetInfo) {
+          await updateTransactionInSheet(activeToken, spreadsheetInfo.id, updatedItem);
+        }
+
+        const updated = transactions.map((t) => (t.id === idToUpdate ? updatedItem : t));
+        setTransactions(updated);
+        saveTransactionsToStorage(updated);
+        setEditingTransaction(null);
+      } else {
+        // Create new item
+        const newTransaction: StockTransaction = {
+          ...data,
+          id: `TX-${Date.now().toString().slice(-6)}`,
+          createdAt: new Date().toISOString(),
+        };
+
+        // If connected to Google Sheets, append to remote sheet
+        if (activeToken && spreadsheetInfo) {
+          await appendTransactionToSheet(activeToken, spreadsheetInfo.id, newTransaction);
+        }
+
+        const updated = [newTransaction, ...transactions];
+        setTransactions(updated);
+        saveTransactionsToStorage(updated);
+      }
+      return true;
+    } catch (err: any) {
+      console.error('Save transaction error:', err);
+      setSheetError(err?.message || 'ไม่สามารถบันทึกข้อมูลได้');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete transaction with confirmation
+  const handleDeleteTransaction = async (id: string) => {
+    setIsDeleting(true);
+    setSheetError(null);
+
+    const activeToken = token || (await getAccessToken());
+
+    try {
+      if (activeToken && spreadsheetInfo) {
+        await deleteTransactionFromSheet(
+          activeToken,
+          spreadsheetInfo.id,
+          id,
+          spreadsheetInfo.sheetId
+        );
+      }
+
+      const updated = transactions.filter((t) => t.id !== id);
+      setTransactions(updated);
+      saveTransactionsToStorage(updated);
+
+      if (editingTransaction?.id === id) {
+        setEditingTransaction(null);
+      }
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      setSheetError(err?.message || 'ไม่สามารถลบรายการได้');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Clear all data
+  const handleConfirmClearAll = () => {
+    resetStoredTransactions();
+    setTransactions([]);
+    setEditingTransaction(null);
+    setIsClearAllModalOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-500 selection:text-white">
+      {/* Top Header */}
+      <Header
+        onClearData={() => setIsClearAllModalOpen(true)}
+        onOpenHtmlModal={() => setIsHtmlModalOpen(true)}
+        recordCount={transactions.length}
+        isGoogleConnected={Boolean(user && spreadsheetInfo)}
+      />
+
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Google Sheets Backend Connection Bar */}
+        <GoogleSheetsBar
+          user={user}
+          spreadsheetInfo={spreadsheetInfo}
+          isConnecting={isConnectingSheet}
+          isSyncing={isSyncing}
+          error={sheetError}
+          onSignIn={handleGoogleSignIn}
+          onSignOut={handleSignOut}
+          onSync={handleSyncData}
+        />
+
+        {/* สรุปตัวชี้วัดสถิติ */}
+        <StatsCards transactions={transactions} />
+
+        {/* ตาราง & ฟอร์มบันทึกข้อมูล */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* ซ้าย: ฟอร์มกรอกข้อมูล (4 คอลัมน์) */}
+          <div className="lg:col-span-4 lg:sticky lg:top-20">
+            <StockForm
+              onSave={handleSaveTransaction}
+              editingTransaction={editingTransaction}
+              onCancelEdit={() => setEditingTransaction(null)}
+              isSaving={isSaving}
+              isGoogleConnected={Boolean(user && spreadsheetInfo)}
+            />
+          </div>
+
+          {/* ขวา: ตารางแสดงรายการย้อนหลัง (8 คอลัมน์) */}
+          <div className="lg:col-span-8">
+            <StockTable
+              transactions={transactions}
+              onDelete={handleDeleteTransaction}
+              onEdit={(item) => {
+                setEditingTransaction(item);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              isGoogleConnected={Boolean(user && spreadsheetInfo)}
+              isDeleting={isDeleting}
+            />
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-slate-200 mt-12 py-5 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span className="font-medium text-slate-700">
+            ระบบบันทึกสต๊อกสินค้า เข้า-ออก (Stock In-Out Management)
+          </span>
+          <span className="text-slate-500 flex items-center gap-1.5 justify-center">
+            {user && spreadsheetInfo ? (
+              <span className="text-emerald-600 font-medium">
+                ● บันทึกข้อมูลและจัดเก็บลง Google Sheets หลังบ้านอัตโนมัติ
+              </span>
+            ) : (
+              <span>พร้อมเชื่อมต่อ Google Sheets เป็นระบบหลังบ้านของคุณ</span>
+            )}
+          </span>
+        </div>
+      </footer>
+
+      {/* Standalone Single File HTML Code Modal */}
+      <HtmlCodeModal
+        isOpen={isHtmlModalOpen}
+        onClose={() => setIsHtmlModalOpen(false)}
+      />
+
+      {/* Confirm Clear All Data Modal */}
+      <ConfirmModal
+        isOpen={isClearAllModalOpen}
+        title="ยืนยันการล้างข้อมูลสต๊อกทั้งหมด?"
+        message="คุณต้องการล้างข้อมูลรายการสต๊อกสินค้าทั้งหมดออกจากแอปพลิเคชันหรือไม่? ระบบจะกลับสู่สถานะโล่งเริ่มต้น"
+        confirmLabel="ยืนยันล้างข้อมูล"
+        cancelLabel="ยกเลิก"
+        isDestructive={true}
+        onConfirm={handleConfirmClearAll}
+        onCancel={() => setIsClearAllModalOpen(false)}
+      />
+    </div>
+  );
+}
