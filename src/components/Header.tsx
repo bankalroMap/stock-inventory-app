@@ -1,10 +1,11 @@
-import { Boxes, Code2, FileSpreadsheet, Trash2, PackagePlus, BarChart3, LogOut, UserCheck } from 'lucide-react';
+import { Boxes, Code2, FileSpreadsheet, Trash2, PackagePlus, BarChart3, LogOut, UserCheck, ShieldCheck } from 'lucide-react';
 import { AppUser } from '../utils/auth';
 
 interface HeaderProps {
   onClearData: () => void;
   onOpenHtmlModal: () => void;
   onOpenCatalogModal: () => void;
+  onOpenUserManagement?: () => void;
   recordCount: number;
   catalogCount: number;
   isGoogleConnected?: boolean;
@@ -18,6 +19,7 @@ export function Header({
   onClearData,
   onOpenHtmlModal,
   onOpenCatalogModal,
+  onOpenUserManagement,
   recordCount,
   catalogCount,
   isGoogleConnected = false,
@@ -91,6 +93,20 @@ export function Header({
             </span>
           </button>
 
+          {/* Super Admin User & Role Management Button */}
+          {currentUser?.role === 'superadmin' && onOpenUserManagement && (
+            <button
+              type="button"
+              onClick={onOpenUserManagement}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition"
+              title="จัดการบัญชีผู้ใช้งาน และสิทธิ์การเข้าถึง (Super Admin)"
+              id="manage-users-header-btn"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>จัดการสิทธิ์ผู้ใช้</span>
+            </button>
+          )}
+
           {/* View Single-File HTML Code */}
           <button
             type="button"
@@ -123,7 +139,7 @@ export function Header({
             <div className="flex items-center gap-2 pl-2 sm:border-l sm:border-slate-200">
               <div
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80"
-                title={`ผู้ใช้งานปัจจุบัน: ${currentUser.name} (ID: ${currentUser.id})`}
+                title={`ผู้ใช้งานปัจจุบัน: ${currentUser.name} (ID: ${currentUser.id} - บทบาท: ${currentUser.role})`}
               >
                 <div
                   className={`w-6 h-6 rounded-lg ${currentUser.avatarBg} font-bold text-[11px] flex items-center justify-center shrink-0 uppercase shadow-xs`}
@@ -133,7 +149,13 @@ export function Header({
                 <div className="text-left leading-tight hidden lg:block">
                   <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
                     <span>{currentUser.id}</span>
-                    <UserCheck className="w-3 h-3 text-emerald-600" />
+                    {currentUser.role === 'superadmin' ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded border border-amber-200">SuperAdmin</span>
+                    ) : currentUser.role === 'admin' ? (
+                      <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.2 rounded border border-rose-200">Admin</span>
+                    ) : (
+                      <UserCheck className="w-3 h-3 text-emerald-600" />
+                    )}
                   </div>
                   <span className="text-[10px] text-slate-500">{currentUser.name.split(' ')[0]}</span>
                 </div>

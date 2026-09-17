@@ -1,6 +1,6 @@
 {
   "name": "ระบบบันทึกสต๊อกสินค้า เข้า-ออก",
-  "description": "ระบบบันทึกสต๊อกสินค้า เข้า-ออก พร้อมระบบ Login ป้องกันสิทธิ์การเข้าถึง, Monitor Dashboard, ตารางสินค้าในคลัง และเชื่อมต่อ Google Sheets",
+  "description": "ระบบบันทึกสต๊อกสินค้า เข้า-ออก พร้อมระบบจัดการสิทธิ์ผู้ใช้งาน (Super Admin / Admin / Staff), Monitor Dashboard, ตารางสินค้าในคลัง และเชื่อมต่อ Google Sheets",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

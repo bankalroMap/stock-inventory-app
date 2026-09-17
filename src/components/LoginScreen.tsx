@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import {
   AppUser,
-  AUTHORIZED_ACCOUNTS,
+  getAccounts,
   verifyCredentials,
   saveAppUser,
 } from '../utils/auth';
@@ -23,6 +23,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+  const [accounts, setAccounts] = useState(() => getAccounts());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -192,7 +193,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           <div className="mt-6 pt-5 border-t border-slate-100">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                รายชื่อผู้มีสิทธิ์เข้าใช้งาน ({AUTHORIZED_ACCOUNTS.length} บัญชี)
+                รายชื่อผู้มีสิทธิ์เข้าใช้งาน ({accounts.length} บัญชี)
               </span>
               <span className="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-md">
                 คลิกเพื่อเลือก ID
@@ -200,8 +201,11 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {AUTHORIZED_ACCOUNTS.map((acc) => {
+              {accounts.map((acc) => {
                 const isSelected = username.toLowerCase() === acc.id.toLowerCase();
+                const isSuperAdmin = acc.role === 'superadmin';
+                const isAdmin = acc.role === 'admin';
+
                 return (
                   <button
                     key={acc.id}
@@ -209,17 +213,22 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                     onClick={() => handleSelectQuickAccount(acc.id)}
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition border ${
                       isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        ? isSuperAdmin
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                          : 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : isSuperAdmin
+                        ? 'bg-amber-50/80 hover:bg-amber-100/80 text-amber-900 border-amber-300 font-semibold'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                     }`}
-                    title={`คลิกเพื่อใส่ ID: ${acc.id}`}
+                    title={`คลิกเพื่อใส่ ID: ${acc.id} (${acc.name} - ${acc.role})`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        acc.role === 'admin' ? 'bg-rose-500' : 'bg-emerald-500'
+                        isSuperAdmin ? 'bg-amber-500 ring-1 ring-amber-300' : isAdmin ? 'bg-rose-500' : 'bg-emerald-500'
                       }`}
                     />
                     <span className="font-semibold">{acc.id}</span>
+                    {isSuperAdmin && <span className="text-[10px]">⭐</span>}
                     {isSelected && <Check className="w-3 h-3 ml-0.5" />}
                   </button>
                 );

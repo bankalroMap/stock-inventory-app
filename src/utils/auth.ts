@@ -1,7 +1,9 @@
+export type UserRole = 'superadmin' | 'admin' | 'staff';
+
 export interface AppUser {
   id: string;
   name: string;
-  role: 'admin' | 'staff';
+  role: UserRole;
   avatarBg: string;
 }
 
@@ -9,14 +11,44 @@ export interface AuthCredential {
   id: string;
   password: string;
   name: string;
-  role: 'admin' | 'staff';
+  role: UserRole;
   avatarBg: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+export const ROLE_LABELS: Record<UserRole, { label: string; desc: string; badgeClass: string; dotClass: string }> = {
+  superadmin: {
+    label: 'Super Admin (ผู้จัดการสิทธิ์)',
+    desc: 'จัดการสิทธิ์ผู้ใช้คนอื่น, เพิ่ม/แก้ไข/ลบ ID และรหัสผ่าน, บันทึกสต๊อกได้ทุกส่วน',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 font-semibold',
+    dotClass: 'bg-amber-500',
+  },
+  admin: {
+    label: 'Admin (ผู้ดูแลระบบสต๊อก)',
+    desc: 'ดูแลคลังสินค้า บันทึก เข้า-ออก แก้ไขและลบรายการสต๊อก เชื่อมต่อ Google Sheets',
+    badgeClass: 'bg-rose-100 text-rose-800 border-rose-300 font-semibold',
+    dotClass: 'bg-rose-500',
+  },
+  staff: {
+    label: 'Staff (พนักงานบันทึกสต๊อก)',
+    desc: 'บันทึกรับเข้า-จ่ายออก ตรวจสอบยอดคงเหลือและสถานะสินค้าในคลัง',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 font-medium',
+    dotClass: 'bg-emerald-500',
+  },
+};
+
 /**
- * บัญชีผู้ใช้งานที่ได้รับอนุญาตให้เข้าถึงระบบสต๊อกสินค้า
+ * รายชื่อบัญชีเริ่มต้นของระบบ
  */
-export const AUTHORIZED_ACCOUNTS: AuthCredential[] = [
+export const INITIAL_ACCOUNTS: AuthCredential[] = [
+  {
+    id: 'superadmin',
+    password: '1234',
+    name: 'SuperAdmin (ผู้จัดการสิทธิ์)',
+    role: 'superadmin',
+    avatarBg: 'bg-amber-600 text-white',
+  },
   {
     id: 'admin',
     password: '1234',
@@ -68,7 +100,175 @@ export const AUTHORIZED_ACCOUNTS: AuthCredential[] = [
   },
 ];
 
+const ACCOUNTS_STORAGE_KEY = 'stock_manager_accounts_v2';
 const APP_USER_SESSION_KEY = 'stock_manager_active_user';
+
+/**
+ * ดึงรายการบัญชีผู้ใช้ทั้งหมดจาก localStorage
+ */
+export function getAccounts(): AuthCredential[] {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // ตรวจสอบว่ามี superadmin อยู่ในระบบหรือไม่ หากยังไม่มีให้แทรกบัญชี superadmin เข้าไป
+        const hasSuperAdmin = parsed.some((a) => a.role === 'superadmin' || a.id.toLowerCase() === 'superadmin');
+        if (!hasSuperAdmin) {
+          const merged = [INITIAL_ACCOUNTS[0], ...parsed];
+          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading accounts from storage:', e);
+  }
+
+  // กำหนดค่าเริ่มต้นและบันทึกลง localStorage
+  try {
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
+  } catch (e) {
+    console.warn('Error saving initial accounts:', e);
+  }
+  return INITIAL_ACCOUNTS;
+}
+
+/**
+ * บันทึกรายการบัญชีทั้งหมดลง localStorage
+ */
+export function saveAccounts(accounts: AuthCredential[]): void {
+  try {
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  } catch (e) {
+    console.warn('Error persisting accounts:', e);
+  }
+}
+
+/**
+ * เพิ่มผู้ใช้งานใหม่ (เฉพาะผู้มีสิทธิ์)
+ */
+export function addAccount(account: AuthCredential): { success: boolean; error?: string } {
+  const accounts = getAccounts();
+  const normalizedId = account.id.trim().toLowerCase();
+
+  if (!normalizedId) {
+    return { success: false, error: 'กรุณาระบุ ID ผู้ใช้งาน' };
+  }
+
+  if (accounts.some((a) => a.id.toLowerCase() === normalizedId)) {
+    return { success: false, error: `ID "${account.id}" มีอยู่ในระบบแล้ว กรุณาใช้ ID อื่น` };
+  }
+
+  if (!account.password.trim()) {
+    return { success: false, error: 'กรุณาระบุ Password' };
+  }
+
+  const newAcc: AuthCredential = {
+    id: account.id.trim(),
+    password: account.password.trim(),
+    name: account.name.trim() || account.id.trim(),
+    role: account.role || 'staff',
+    avatarBg: account.avatarBg || getRandomAvatarBg(account.role),
+    createdAt: new Date().toISOString(),
+  };
+
+  accounts.push(newAcc);
+  saveAccounts(accounts);
+  return { success: true };
+}
+
+/**
+ * แก้ไขบทบาท, ID, Password และชื่อของผู้ใช้งาน
+ */
+export function updateAccount(oldId: string, updated: Partial<AuthCredential>): { success: boolean; error?: string } {
+  const accounts = getAccounts();
+  const index = accounts.findIndex((a) => a.id.toLowerCase() === oldId.trim().toLowerCase());
+
+  if (index === -1) {
+    return { success: false, error: 'ไม่พบบัญชีผู้ใช้งานที่ต้องการแก้ไข' };
+  }
+
+  // หากมีการเปลี่ยน ID ต้องตรวจว่าซ้ำกับคนอื่นหรือไม่
+  if (updated.id && updated.id.trim().toLowerCase() !== oldId.trim().toLowerCase()) {
+    const newIdNormalized = updated.id.trim().toLowerCase();
+    if (accounts.some((a, idx) => idx !== index && a.id.toLowerCase() === newIdNormalized)) {
+      return { success: false, error: `ID "${updated.id}" มีผู้ใช้งานคนอื่นใช้อยู่แล้ว` };
+    }
+  }
+
+  // ตรวจสอบว่าต้องมี superadmin หลงเหลืออย่างน้อย 1 บัญชี
+  if (accounts[index].role === 'superadmin' && updated.role && updated.role !== 'superadmin') {
+    const superadminCount = accounts.filter((a) => a.role === 'superadmin').length;
+    if (superadminCount <= 1) {
+      return { success: false, error: 'ต้องมีผู้ใช้งานบทบาท Super Admin อย่างน้อย 1 บัญชีในระบบ' };
+    }
+  }
+
+  const existing = accounts[index];
+  accounts[index] = {
+    ...existing,
+    ...updated,
+    id: updated.id ? updated.id.trim() : existing.id,
+    password: updated.password !== undefined && updated.password !== '' ? updated.password.trim() : existing.password,
+    name: updated.name ? updated.name.trim() : existing.name,
+    role: updated.role || existing.role,
+    avatarBg: updated.avatarBg || existing.avatarBg,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveAccounts(accounts);
+
+  // ถ้าผู้ใช้ปัจจุบันคือคนที่ถูกแก้ไข ให้ปรับปรุง session ด้วย
+  const currentUser = getStoredAppUser();
+  if (currentUser && currentUser.id.toLowerCase() === oldId.trim().toLowerCase()) {
+    saveAppUser({
+      id: accounts[index].id,
+      name: accounts[index].name,
+      role: accounts[index].role,
+      avatarBg: accounts[index].avatarBg,
+    });
+  }
+
+  return { success: true };
+}
+
+/**
+ * ลบบัญชีผู้ใช้งาน
+ */
+export function deleteAccount(idToDelete: string, currentUserId: string): { success: boolean; error?: string } {
+  const accounts = getAccounts();
+  const normalizedId = idToDelete.trim().toLowerCase();
+
+  if (normalizedId === currentUserId.trim().toLowerCase()) {
+    return { success: false, error: 'ไม่สามารถลบบัญชีที่กำลังเข้าสู่ระบบอยู่ในขณะนี้ได้' };
+  }
+
+  const target = accounts.find((a) => a.id.toLowerCase() === normalizedId);
+  if (!target) {
+    return { success: false, error: 'ไม่พบบัญชีที่ต้องการลบ' };
+  }
+
+  if (target.role === 'superadmin') {
+    const superadminCount = accounts.filter((a) => a.role === 'superadmin').length;
+    if (superadminCount <= 1) {
+      return { success: false, error: 'ไม่สามารถลบ Super Admin บัญชีสุดท้ายของระบบได้' };
+    }
+  }
+
+  const filtered = accounts.filter((a) => a.id.toLowerCase() !== normalizedId);
+  saveAccounts(filtered);
+  return { success: true };
+}
+
+/**
+ * รีเซ็ตบัญชีกลับสู่ค่าเริ่มต้น
+ */
+export function resetAccountsToDefault(): AuthCredential[] {
+  saveAccounts(INITIAL_ACCOUNTS);
+  return INITIAL_ACCOUNTS;
+}
 
 /**
  * ตรวจสอบ ID และ Password สำหรับ Login
@@ -77,7 +277,8 @@ export function verifyCredentials(id: string, password: string): AppUser | null 
   const normalizedId = id.trim().toLowerCase();
   const normalizedPw = password.trim();
 
-  const account = AUTHORIZED_ACCOUNTS.find(
+  const accounts = getAccounts();
+  const account = accounts.find(
     (acc) => acc.id.toLowerCase() === normalizedId && acc.password === normalizedPw
   );
 
@@ -100,8 +301,8 @@ export function getStoredAppUser(): AppUser | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.id === 'string') {
-      // Validate that the ID still exists in our authorized list
-      const valid = AUTHORIZED_ACCOUNTS.find((a) => a.id.toLowerCase() === parsed.id.toLowerCase());
+      const accounts = getAccounts();
+      const valid = accounts.find((a) => a.id.toLowerCase() === parsed.id.toLowerCase());
       if (valid) {
         return {
           id: valid.id,
@@ -143,4 +344,22 @@ export function clearAppUser(): void {
   } catch (e) {
     console.warn('Error clearing user session:', e);
   }
+}
+
+/**
+ * สุ่มสีอวาตาร์ตามบทบาท
+ */
+export function getRandomAvatarBg(role: UserRole): string {
+  if (role === 'superadmin') return 'bg-amber-600 text-white';
+  if (role === 'admin') return 'bg-rose-500 text-white';
+
+  const staffColors = [
+    'bg-indigo-500 text-white',
+    'bg-emerald-500 text-white',
+    'bg-cyan-500 text-white',
+    'bg-purple-500 text-white',
+    'bg-teal-500 text-white',
+    'bg-blue-500 text-white',
+  ];
+  return staffColors[Math.floor(Math.random() * staffColors.length)];
 }

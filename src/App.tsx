@@ -38,11 +38,13 @@ import { HtmlCodeModal } from './components/HtmlCodeModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
 import { LoginScreen } from './components/LoginScreen';
+import { UserManagementModal } from './components/UserManagementModal';
 import { AppUser, getStoredAppUser, clearAppUser } from './utils/auth';
 
 export default function App() {
   // Authentication & Access Protection State
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => getStoredAppUser());
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
 
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
@@ -443,6 +445,7 @@ export default function App() {
         onClearData={() => setIsClearAllModalOpen(true)}
         onOpenHtmlModal={() => setIsHtmlModalOpen(true)}
         onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
         recordCount={transactions.length}
         catalogCount={catalog.length}
         isGoogleConnected={Boolean(user && spreadsheetInfo)}
@@ -638,6 +641,14 @@ export default function App() {
       <HtmlCodeModal
         isOpen={isHtmlModalOpen}
         onClose={() => setIsHtmlModalOpen(false)}
+      />
+
+      {/* User & Role Management Modal (Super Admin only) */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        currentUser={currentUser}
+        onUserSessionUpdated={(updated) => setCurrentUser(updated)}
       />
 
       {/* Confirm Clear All Data Modal */}
