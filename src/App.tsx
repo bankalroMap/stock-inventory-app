@@ -20,6 +20,8 @@ import {
   appendTransactionToSheet,
   updateTransactionInSheet,
   deleteTransactionFromSheet,
+  fetchCatalogFromSheet,
+  saveCatalogToSheet,
   SpreadsheetInfo,
 } from './services/googleSheets';
 import { Header } from './components/Header';
@@ -48,6 +50,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
 
   // Confirmation modal state for clearing all
@@ -62,16 +65,35 @@ export default function App() {
     setCatalog(storedCatalog);
   }, []);
 
-  // Save updated catalog to storage & state
-  const handleSaveCatalog = (updatedCatalog: ProductCatalogItem[]) => {
+  // Save updated catalog to storage & state (and sync to Google Sheets if connected)
+  const handleSaveCatalog = async (updatedCatalog: ProductCatalogItem[]) => {
     setCatalog(updatedCatalog);
     saveProductCatalogToStorage(updatedCatalog);
+
+    const activeToken = token || (await getAccessToken());
+    if (activeToken && spreadsheetInfo) {
+      try {
+        await saveCatalogToSheet(activeToken, spreadsheetInfo.id, updatedCatalog);
+      } catch (err) {
+        console.error('Failed to sync catalog to Google Sheets:', err);
+      }
+    }
   };
 
-  // Reset catalog to default sample list
-  const handleResetCatalog = () => {
+  // Reset catalog to default sample list (and sync to Google Sheets if connected)
+  const handleResetCatalog = async () => {
     const reset = resetProductCatalogToDefault();
     setCatalog(reset);
+    saveProductCatalogToStorage(reset);
+
+    const activeToken = token || (await getAccessToken());
+    if (activeToken && spreadsheetInfo) {
+      try {
+        await saveCatalogToSheet(activeToken, spreadsheetInfo.id, reset);
+      } catch (err) {
+        console.error('Failed to reset catalog in Google Sheets:', err);
+      }
+    }
   };
 
 
@@ -80,15 +102,26 @@ export default function App() {
     setIsConnectingSheet(true);
     setSheetError(null);
     try {
-      const sheet = await findOrCreateStockSpreadsheet(authToken);
+      const currentCatalog = getStoredProductCatalog();
+      const sheet = await findOrCreateStockSpreadsheet(authToken, currentCatalog);
       setSpreadsheetInfo(sheet);
 
-      // Fetch live data from sheet
+      // Fetch live data from sheet (both transactions and catalog)
       setIsSyncing(true);
       try {
-        const remoteData = await fetchTransactionsFromSheet(authToken, sheet.id);
+        const [remoteData, remoteCatalog] = await Promise.all([
+          fetchTransactionsFromSheet(authToken, sheet.id),
+          fetchCatalogFromSheet(authToken, sheet.id),
+        ]);
         setTransactions(remoteData);
         saveTransactionsToStorage(remoteData);
+
+        if (remoteCatalog && remoteCatalog.length > 0) {
+          setCatalog(remoteCatalog);
+          saveProductCatalogToStorage(remoteCatalog);
+        } else if (currentCatalog && currentCatalog.length > 0) {
+          await saveCatalogToSheet(authToken, sheet.id, currentCatalog);
+        }
       } catch (fetchErr: any) {
         console.warn('Initial sheet fetch:', fetchErr);
       } finally {
@@ -153,7 +186,7 @@ export default function App() {
     }
   };
 
-  // Sync / Refresh data from Google Sheets
+  // Sync / Refresh data from Google Sheets (both transactions and catalog)
   const handleSyncData = async () => {
     const activeToken = token || (await getAccessToken());
     if (!activeToken || !spreadsheetInfo) {
@@ -164,14 +197,45 @@ export default function App() {
     setIsSyncing(true);
     setSheetError(null);
     try {
-      const remote = await fetchTransactionsFromSheet(activeToken, spreadsheetInfo.id);
-      setTransactions(remote);
-      saveTransactionsToStorage(remote);
+      const [remoteTransactions, remoteCatalog] = await Promise.all([
+        fetchTransactionsFromSheet(activeToken, spreadsheetInfo.id),
+        fetchCatalogFromSheet(activeToken, spreadsheetInfo.id),
+      ]);
+      setTransactions(remoteTransactions);
+      saveTransactionsToStorage(remoteTransactions);
+
+      if (remoteCatalog && remoteCatalog.length > 0) {
+        setCatalog(remoteCatalog);
+        saveProductCatalogToStorage(remoteCatalog);
+      }
     } catch (err: any) {
       console.error('Sync error:', err);
       setSheetError(err?.message || 'ซิงค์ข้อมูลจาก Google Sheets ไม่สำเร็จ');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Dedicated catalog sync from sheet (for modal button)
+  const handleSyncCatalogFromSheet = async () => {
+    const activeToken = token || (await getAccessToken());
+    if (!activeToken || !spreadsheetInfo) {
+      setSheetError('กรุณาลงชื่อเข้าใช้ Google เพื่อซิงค์ข้อมูล');
+      return;
+    }
+
+    setIsSyncingCatalog(true);
+    try {
+      const remoteCatalog = await fetchCatalogFromSheet(activeToken, spreadsheetInfo.id);
+      if (remoteCatalog && remoteCatalog.length > 0) {
+        setCatalog(remoteCatalog);
+        saveProductCatalogToStorage(remoteCatalog);
+      }
+    } catch (err: any) {
+      console.error('Catalog sync error:', err);
+      setSheetError(err?.message || 'ซิงค์แคตตาล็อกสินค้าจาก Google Sheets ไม่สำเร็จ');
+    } finally {
+      setIsSyncingCatalog(false);
     }
   };
 
@@ -356,6 +420,10 @@ export default function App() {
         catalog={catalog}
         onSaveCatalog={handleSaveCatalog}
         onResetCatalog={handleResetCatalog}
+        spreadsheetInfo={spreadsheetInfo}
+        isGoogleConnected={Boolean(user && spreadsheetInfo)}
+        onSyncFromGoogleSheets={handleSyncCatalogFromSheet}
+        isSyncingCatalog={isSyncingCatalog}
       />
 
       {/* Standalone Single File HTML Code Modal */}

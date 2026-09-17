@@ -14,9 +14,12 @@ import {
   FileText,
   RotateCcw,
   Sparkles,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { ProductCatalogItem } from '../types';
 import { DEFAULT_CATEGORIES, DEFAULT_UNITS, parseCatalogFromText } from '../utils/storage';
+import { SpreadsheetInfo } from '../services/googleSheets';
 
 interface ProductCatalogModalProps {
   isOpen: boolean;
@@ -24,6 +27,10 @@ interface ProductCatalogModalProps {
   catalog: ProductCatalogItem[];
   onSaveCatalog: (newCatalog: ProductCatalogItem[]) => void;
   onResetCatalog: () => void;
+  spreadsheetInfo?: SpreadsheetInfo | null;
+  isGoogleConnected?: boolean;
+  onSyncFromGoogleSheets?: () => Promise<void>;
+  isSyncingCatalog?: boolean;
 }
 
 type TabType = 'LIST' | 'IMPORT' | 'ADD_EDIT';
@@ -34,6 +41,10 @@ export function ProductCatalogModal({
   catalog,
   onSaveCatalog,
   onResetCatalog,
+  spreadsheetInfo,
+  isGoogleConnected,
+  onSyncFromGoogleSheets,
+  isSyncingCatalog,
 }: ProductCatalogModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
@@ -360,6 +371,58 @@ export function ProductCatalogModal({
           </div>
         </div>
 
+        {/* Google Sheets Sync Banner */}
+        {isGoogleConnected && spreadsheetInfo && (
+          <div className="mx-6 mt-4 p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <FileSpreadsheet className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800">เชื่อมต่อ Google Sheets</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                    แท็บ &ldquo;คลังสินค้า&rdquo;
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  คุณสามารถเพิ่ม แก้ไข หรือนำเข้ารายการสินค้าบน Google Sheets แท็บ &ldquo;คลังสินค้า&rdquo; ได้โดยตรง
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-stretch sm:self-auto justify-end">
+              {onSyncFromGoogleSheets && (
+                <button
+                  type="button"
+                  onClick={onSyncFromGoogleSheets}
+                  disabled={isSyncingCatalog}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 transition shadow-2xs disabled:opacity-50"
+                  title="ดึงรายการสินค้าล่าสุดจากแท็บคลังสินค้าบน Google Sheets"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncingCatalog ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingCatalog ? 'กำลังดึง...' : 'ดึงจาก Google Sheets'}</span>
+                </button>
+              )}
+              {spreadsheetInfo.url && (
+                <a
+                  href={
+                    spreadsheetInfo.catalogSheetId !== undefined
+                      ? `${spreadsheetInfo.url}#gid=${spreadsheetInfo.catalogSheetId}`
+                      : spreadsheetInfo.url
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs"
+                >
+                  <span>เปิด Google Sheets</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab Body */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
           {/* TAB 1: LIST */}
@@ -520,6 +583,40 @@ export function ProductCatalogModal({
           {/* TAB 2: IMPORT FROM EXCEL / CSV */}
           {activeTab === 'IMPORT' && (
             <div className="space-y-5">
+              {/* Google Sheets Direct Edit Option */}
+              {isGoogleConnected && spreadsheetInfo && (
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900">
+                        คุณมีระบบหลังบ้านบน Google Sheets อยู่แล้ว!
+                      </h4>
+                      <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                        สามารถเปิด Google Sheets แล้วเข้าไปที่แท็บ <strong>&ldquo;คลังสินค้า&rdquo;</strong> เพื่อพิมพ์ วาง หรือแก้ไขรายการสินค้าได้โดยตรง เมื่อบันทึกแล้วกดปุ่ม <strong>&ldquo;ดึงข้อมูลจาก Google Sheets&rdquo;</strong> รายการจะอัปเดตลงระบบและแสดงใน Dropdown ทันที
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={
+                        spreadsheetInfo.catalogSheetId !== undefined
+                          ? `${spreadsheetInfo.url}#gid=${spreadsheetInfo.catalogSheetId}`
+                          : spreadsheetInfo.url
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs"
+                    >
+                      <span>เปิดแท็บ &ldquo;คลังสินค้า&rdquo;</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Info banner */}
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
                 <FileSpreadsheet className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />

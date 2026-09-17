@@ -80,8 +80,7 @@ export function GoogleSheetsBar({
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                  ลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อสร้างและเชื่อมต่อตารางสต๊อกสินค้าบน Google Sheets ของคุณอัตโนมัติ 
-                  ทุกครั้งที่บันทึกสินค้า รับเข้า-จ่ายออก ข้อมูลจะถูกเขียนลง Google Sheet แบบเรียลไทม์ทันที
+                  ลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อเชื่อมต่อระบบหลังบ้านบน Google Sheets อัตโนมัติ: บันทึกสต๊อก เข้า-ออก (แท็บ &ldquo;สต๊อกสินค้า&rdquo;) และจัดการรายการสินค้าพร้อมราคาทุน/ราคาขาย (แท็บ &ldquo;คลังสินค้า&rdquo;)
                 </p>
               </div>
             </div>
@@ -208,11 +207,22 @@ export function GoogleSheetsBar({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 truncate">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="truncate font-medium text-slate-700">
-                {spreadsheetInfo?.name || 'กำลังเตรียม Google Sheet...'}
-              </span>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-slate-500">
+              <div className="flex items-center gap-1.5 truncate">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate font-medium text-slate-700">
+                  {spreadsheetInfo?.name || 'กำลังเตรียม Google Sheet...'}
+                </span>
+              </div>
+              <span className="text-slate-300">|</span>
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                  1. สต๊อกสินค้า
+                </span>
+                <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-semibold">
+                  2. คลังสินค้า
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -221,17 +231,32 @@ export function GoogleSheetsBar({
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {/* Open Google Sheet link */}
           {spreadsheetInfo?.url && (
-            <a
-              href={spreadsheetInfo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs"
-              title="เปิด Google Sheets ในแท็บใหม่"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              <span>เปิดดู Google Sheet หลังบ้าน</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            <div className="flex items-center gap-1.5">
+              <a
+                href={spreadsheetInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs"
+                title="เปิด Google Sheets ในแท็บสต๊อกสินค้า"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>เปิดดู Google Sheet</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+
+              {spreadsheetInfo.catalogSheetId !== undefined && (
+                <a
+                  href={`${spreadsheetInfo.url}#gid=${spreadsheetInfo.catalogSheetId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition shadow-2xs"
+                  title="เปิดดูและแก้ไขแคตตาล็อกสินค้าในแท็บคลังสินค้า"
+                >
+                  <span>แท็บคลังสินค้า</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
           )}
 
           {/* Sync button */}

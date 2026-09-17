@@ -1,6 +1,7 @@
-import { StockTransaction } from '../types';
+import { StockTransaction, ProductCatalogItem } from '../types';
 
 export const STOCK_SHEET_TITLE = 'สต๊อกสินค้า';
+export const CATALOG_SHEET_TITLE = 'คลังสินค้า';
 export const SPREADSHEET_NAME = 'ระบบบันทึกสต๊อกสินค้า เข้า-ออก (Stock Inventory)';
 export const SAVED_SPREADSHEET_ID_KEY = 'GOOGLE_SHEETS_STOCK_ID';
 
@@ -9,6 +10,7 @@ export interface SpreadsheetInfo {
   name: string;
   url: string;
   sheetId: number;
+  catalogSheetId?: number;
 }
 
 const TABLE_HEADERS = [
@@ -26,10 +28,23 @@ const TABLE_HEADERS = [
   'เวลาบันทึก (Timestamp)',
 ];
 
+export const CATALOG_TABLE_HEADERS = [
+  'รหัสสินค้า (SKU)',
+  'ชื่อรายการสินค้า',
+  'กลุ่มที่ผลิตสินค้า',
+  'ราคาทุน/รับเข้า (บาท)',
+  'ราคาขาย (บาท)',
+  'หน่วยนับ',
+  'หมายเหตุ',
+];
+
 /**
  * Searches Google Drive for an existing spreadsheet created by the app or creates a new one.
  */
-export async function findOrCreateStockSpreadsheet(accessToken: string): Promise<SpreadsheetInfo> {
+export async function findOrCreateStockSpreadsheet(
+  accessToken: string,
+  initialCatalogItems?: ProductCatalogItem[]
+): Promise<SpreadsheetInfo> {
   const savedId = localStorage.getItem(SAVED_SPREADSHEET_ID_KEY);
 
   if (savedId) {
@@ -48,14 +63,37 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
         const sheetId = mainSheet?.properties?.sheetId ?? 0;
         const sheetTitle = mainSheet?.properties?.title ?? STOCK_SHEET_TITLE;
 
-        // Ensure headers exist
+        // Ensure headers exist for transactions
         await ensureHeaders(accessToken, savedId, sheetTitle);
+
+        // Check or create catalog sheet
+        let catalogSheet = meta.sheets?.find(
+          (s: any) => s.properties?.title === CATALOG_SHEET_TITLE
+        );
+        let catalogSheetId = catalogSheet?.properties?.sheetId;
+        if (!catalogSheet) {
+          catalogSheetId = await createCatalogSheet(accessToken, savedId);
+        }
+        await ensureCatalogHeaders(accessToken, savedId);
+
+        // If catalog sheet is empty and initialCatalogItems provided, populate it
+        if (initialCatalogItems && initialCatalogItems.length > 0) {
+          try {
+            const existingCatalog = await fetchCatalogFromSheet(accessToken, savedId);
+            if (existingCatalog.length === 0) {
+              await saveCatalogToSheet(accessToken, savedId, initialCatalogItems);
+            }
+          } catch (e) {
+            console.warn('Could not populate initial catalog:', e);
+          }
+        }
 
         return {
           id: savedId,
           name: meta.properties?.title || SPREADSHEET_NAME,
           url: `https://docs.google.com/spreadsheets/d/${savedId}/edit`,
           sheetId,
+          catalogSheetId,
         };
       }
     } catch (err) {
@@ -81,7 +119,7 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
         const file = driveData.files[0];
         localStorage.setItem(SAVED_SPREADSHEET_ID_KEY, file.id);
 
-        // Fetch sheet id
+        // Fetch sheet ids
         const metaRes = await fetch(
           `https://sheets.googleapis.com/v4/spreadsheets/${file.id}?fields=sheets.properties(sheetId,title)`,
           {
@@ -89,7 +127,9 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
           }
         );
         let sheetId = 0;
+        let catalogSheetId: number | undefined;
         let sheetTitle = STOCK_SHEET_TITLE;
+
         if (metaRes.ok) {
           const meta = await metaRes.json();
           const target =
@@ -97,15 +137,39 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
             meta.sheets?.[0];
           sheetId = target?.properties?.sheetId ?? 0;
           sheetTitle = target?.properties?.title ?? STOCK_SHEET_TITLE;
+
+          const catTarget = meta.sheets?.find(
+            (s: any) => s.properties?.title === CATALOG_SHEET_TITLE
+          );
+          if (catTarget) {
+            catalogSheetId = catTarget.properties?.sheetId;
+          }
         }
 
         await ensureHeaders(accessToken, file.id, sheetTitle);
+
+        if (catalogSheetId === undefined) {
+          catalogSheetId = await createCatalogSheet(accessToken, file.id);
+        }
+        await ensureCatalogHeaders(accessToken, file.id);
+
+        if (initialCatalogItems && initialCatalogItems.length > 0) {
+          try {
+            const existing = await fetchCatalogFromSheet(accessToken, file.id);
+            if (existing.length === 0) {
+              await saveCatalogToSheet(accessToken, file.id, initialCatalogItems);
+            }
+          } catch (e) {
+            console.warn('Could not populate initial catalog on existing sheet:', e);
+          }
+        }
 
         return {
           id: file.id,
           name: file.name,
           url: file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`,
           sheetId,
+          catalogSheetId,
         };
       }
     }
@@ -113,7 +177,7 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
     console.warn('Drive search failed, proceeding to create new sheet', err);
   }
 
-  // Create a brand new Google Spreadsheet
+  // Create a brand new Google Spreadsheet with BOTH tabs: "สต๊อกสินค้า" and "คลังสินค้า"
   const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     headers: {
@@ -133,6 +197,14 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
             },
           },
         },
+        {
+          properties: {
+            title: CATALOG_SHEET_TITLE,
+            gridProperties: {
+              frozenRowCount: 1,
+            },
+          },
+        },
       ],
     }),
   });
@@ -145,17 +217,29 @@ export async function findOrCreateStockSpreadsheet(accessToken: string): Promise
   const newSheetData = await createRes.json();
   const newId = newSheetData.spreadsheetId;
   const newSheetId = newSheetData.sheets?.[0]?.properties?.sheetId ?? 0;
+  const newCatalogSheetId = newSheetData.sheets?.[1]?.properties?.sheetId ?? 1;
 
   localStorage.setItem(SAVED_SPREADSHEET_ID_KEY, newId);
 
-  // Set Headers with styling
+  // Set Headers for both sheets
   await ensureHeaders(accessToken, newId, STOCK_SHEET_TITLE);
+  await ensureCatalogHeaders(accessToken, newId, CATALOG_SHEET_TITLE);
+
+  // If initialCatalogItems provided, populate the catalog sheet
+  if (initialCatalogItems && initialCatalogItems.length > 0) {
+    try {
+      await saveCatalogToSheet(accessToken, newId, initialCatalogItems);
+    } catch (e) {
+      console.warn('Could not seed catalog into new spreadsheet:', e);
+    }
+  }
 
   return {
     id: newId,
     name: SPREADSHEET_NAME,
     url: `https://docs.google.com/spreadsheets/d/${newId}/edit`,
     sheetId: newSheetId,
+    catalogSheetId: newCatalogSheetId,
   };
 }
 
@@ -451,3 +535,214 @@ export async function updateTransactionInSheet(
 
   return updateRes.ok;
 }
+
+/**
+ * Create 'คลังสินค้า' sheet tab if it doesn't exist
+ */
+export async function createCatalogSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetTitle: string = CATALOG_SHEET_TITLE
+): Promise<number> {
+  try {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: sheetTitle,
+                  gridProperties: {
+                    frozenRowCount: 1,
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.replies?.[0]?.addSheet?.properties?.sheetId ?? 1;
+    }
+  } catch (err) {
+    console.warn('Failed to create catalog sheet:', err);
+  }
+  return 1;
+}
+
+/**
+ * Ensure header row exists in the catalog sheet
+ */
+export async function ensureCatalogHeaders(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetTitle: string = CATALOG_SHEET_TITLE
+): Promise<void> {
+  try {
+    const checkRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+        sheetTitle
+      )}!A1:G1`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (checkRes.ok) {
+      const data = await checkRes.json();
+      if (data.values && data.values.length > 0 && data.values[0].length >= 3) {
+        return; // Headers exist
+      }
+    }
+
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+        sheetTitle
+      )}!A1:G1?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: [CATALOG_TABLE_HEADERS],
+        }),
+      }
+    );
+  } catch (err) {
+    console.error('Failed to initialize catalog headers:', err);
+  }
+}
+
+/**
+ * Fetch product catalog items from the 'คลังสินค้า' sheet
+ */
+export async function fetchCatalogFromSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetTitle: string = CATALOG_SHEET_TITLE
+): Promise<ProductCatalogItem[]> {
+  const range = `${encodeURIComponent(sheetTitle)}!A2:G`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!res.ok) {
+    console.warn('Could not fetch catalog from sheet:', await res.text());
+    return [];
+  }
+
+  const data = await res.json();
+  const rows = data.values || [];
+  const catalog: ProductCatalogItem[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const rawCode = String(row[0] || '').trim();
+    const rawName = String(row[1] || '').trim();
+
+    // In case the user typed product name in column A or B
+    let code = rawCode;
+    let name = rawName;
+    if (!name && rawCode) {
+      name = rawCode;
+      code = `PRD-${1000 + i}`;
+    }
+    if (!name) continue;
+
+    const category = String(row[2] || 'ทั่วไป').trim();
+    const costPrice = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
+    const sellingPrice =
+      parseFloat(String(row[4] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
+    const unit = String(row[5] || 'ชิ้น').trim();
+    const note = String(row[6] || '').trim();
+
+    catalog.push({
+      id: code || `PRD-${1000 + i}`,
+      code: code || `PRD-${1000 + i}`,
+      name,
+      category,
+      costPrice,
+      sellingPrice,
+      unit: unit || 'ชิ้น',
+      note: note || undefined,
+    });
+  }
+
+  return catalog;
+}
+
+/**
+ * Save/replace all product catalog items to the 'คลังสินค้า' sheet on Google Sheets
+ */
+export async function saveCatalogToSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  catalog: ProductCatalogItem[],
+  sheetTitle: string = CATALOG_SHEET_TITLE
+): Promise<void> {
+  // Ensure catalog headers first
+  await ensureCatalogHeaders(accessToken, spreadsheetId, sheetTitle);
+
+  // Clear existing catalog data rows (A2:G)
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+      sheetTitle
+    )}!A2:G:clear`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (catalog.length === 0) return;
+
+  const rows = catalog.map((item, idx) => [
+    item.code || item.id || `PRD-${1000 + idx}`,
+    item.name,
+    item.category || 'ทั่วไป',
+    item.costPrice ?? 0,
+    item.sellingPrice,
+    item.unit || 'ชิ้น',
+    item.note || '',
+  ]);
+
+  const range = `${encodeURIComponent(sheetTitle)}!A2:G?valueInputOption=USER_ENTERED`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: rows,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`บันทึกแคตตาล็อกสินค้าลง Google Sheet ไม่สำเร็จ: ${errText}`);
+  }
+}
+
