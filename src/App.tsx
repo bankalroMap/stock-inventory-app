@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Boxes, History } from 'lucide-react';
-import { StockTransaction, AuthUser, ProductCatalogItem } from './types';
+import { Boxes, History, BarChart3 } from 'lucide-react';
+import { StockTransaction, AuthUser, ProductCatalogItem, ProductStockStatus } from './types';
 import {
   getStoredTransactions,
   saveTransactionsToStorage,
@@ -31,6 +31,7 @@ import { StatsCards } from './components/StatsCards';
 import { StockForm } from './components/StockForm';
 import { StockTable } from './components/StockTable';
 import { WarehouseInventoryTable } from './components/WarehouseInventoryTable';
+import { MonitorDashboard } from './components/MonitorDashboard';
 import { HtmlCodeModal } from './components/HtmlCodeModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
@@ -40,8 +41,8 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
 
-  // Active view tab: Inventory with stock status or Transaction history
-  const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS'>('INVENTORY');
+  // Active view tab: Inventory with stock status, Monitor Dashboard with charts, or Transaction history
+  const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS' | 'DASHBOARD'>('INVENTORY');
 
   // Quick prefill trigger from inventory table to form
   const [prefillProduct, setPrefillProduct] = useState<{
@@ -392,6 +393,8 @@ export default function App() {
         recordCount={transactions.length}
         catalogCount={catalog.length}
         isGoogleConnected={Boolean(user && spreadsheetInfo)}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
       />
 
       {/* Main Content */}
@@ -415,96 +418,131 @@ export default function App() {
           onSelectStatusFilter={() => setActiveTab('INVENTORY')}
         />
 
-        {/* ตาราง & ฟอร์มบันทึกข้อมูล */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* ซ้าย: ฟอร์มกรอกข้อมูล (4 คอลัมน์) */}
-          <div id="stock-form-section" className="lg:col-span-4 lg:sticky lg:top-20">
-            <StockForm
-              onSave={handleSaveTransaction}
-              editingTransaction={editingTransaction}
-              onCancelEdit={() => setEditingTransaction(null)}
-              isSaving={isSaving}
-              isGoogleConnected={Boolean(user && spreadsheetInfo)}
-              catalog={catalog}
-              onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
-              prefillProduct={prefillProduct}
-            />
-          </div>
+        {/* เมนูหลักสลับ 3 โหมด: สต๊อกสินค้า / Monitor Dashboard / ประวัติเข้าออก */}
+        <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setActiveTab('INVENTORY')}
+            className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'INVENTORY'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Boxes className="w-4 h-4" />
+            <span>สินค้าในคลัง &amp; สถานะ</span>
+            <span
+              className={`ml-1 text-[11px] px-2 py-0.5 rounded-full ${
+                activeTab === 'INVENTORY'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {catalog.length} รายการ
+            </span>
+          </button>
 
-          {/* ขวา: แท็บสลับระหว่าง "สินค้าในคลัง & สถานะ" กับ "ประวัติรับเข้า-จ่ายออก" (8 คอลัมน์) */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* View Selector Tabs */}
-            <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setActiveTab('INVENTORY')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'INVENTORY'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Boxes className="w-4 h-4" />
-                <span>สินค้าในคลังทั้งหมด &amp; สถานะ</span>
-                <span
-                  className={`ml-1 text-[11px] px-2 py-0.5 rounded-full ${
-                    activeTab === 'INVENTORY'
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {catalog.length} รายการ
-                </span>
-              </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('DASHBOARD')}
+            className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'DASHBOARD'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Monitor Dashboard (ดูกราฟต่างๆ)</span>
+            <span
+              className={`ml-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'DASHBOARD'
+                  ? 'bg-emerald-400 text-slate-950'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              }`}
+            >
+              Live
+            </span>
+          </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('TRANSACTIONS')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'TRANSACTIONS'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <History className="w-4 h-4" />
-                <span>ประวัติ รับเข้า-จ่ายออก</span>
-                <span
-                  className={`ml-1 text-[11px] px-2 py-0.5 rounded-full ${
-                    activeTab === 'TRANSACTIONS'
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {transactions.length} รายการ
-                </span>
-              </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('TRANSACTIONS')}
+            className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'TRANSACTIONS'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>ประวัติ รับเข้า-จ่ายออก</span>
+            <span
+              className={`ml-1 text-[11px] px-2 py-0.5 rounded-full ${
+                activeTab === 'TRANSACTIONS'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {transactions.length} รายการ
+            </span>
+          </button>
+        </div>
+
+        {/* เนื้อหาตามแท็บที่เลือก */}
+        {activeTab === 'DASHBOARD' ? (
+          /* Monitor Dashboard แบบเต็มหน้าจอเพื่อการแสดงผลกราฟที่ชัดเจน */
+          <MonitorDashboard
+            catalog={catalog}
+            transactions={transactions}
+            onSelectProductForTransaction={handleSelectProductFromInventory}
+            onNavigateToInventory={() => {
+              setActiveTab('INVENTORY');
+              window.scrollTo({ top: 400, behavior: 'smooth' });
+            }}
+          />
+        ) : (
+          /* โครงสร้าง 2 คอลัมน์สำหรับบันทึกและจัดการสต๊อก */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* ซ้าย: ฟอร์มกรอกข้อมูล (4 คอลัมน์) */}
+            <div id="stock-form-section" className="lg:col-span-4 lg:sticky lg:top-20">
+              <StockForm
+                onSave={handleSaveTransaction}
+                editingTransaction={editingTransaction}
+                onCancelEdit={() => setEditingTransaction(null)}
+                isSaving={isSaving}
+                isGoogleConnected={Boolean(user && spreadsheetInfo)}
+                catalog={catalog}
+                onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
+                prefillProduct={prefillProduct}
+              />
             </div>
 
-            {/* Active View Content */}
-            {activeTab === 'INVENTORY' ? (
-              <WarehouseInventoryTable
-                catalog={catalog}
-                transactions={transactions}
-                onSelectProductForTransaction={handleSelectProductFromInventory}
-                onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
-                isGoogleConnected={Boolean(user && spreadsheetInfo)}
-              />
-            ) : (
-              <StockTable
-                transactions={transactions}
-                onDelete={handleDeleteTransaction}
-                onEdit={(item) => {
-                  setEditingTransaction(item);
-                  const el = document.getElementById('stock-form-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  else window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                isGoogleConnected={Boolean(user && spreadsheetInfo)}
-                isDeleting={isDeleting}
-              />
-            )}
+            {/* ขวา: ตารางตามแท็บที่เลือก (8 คอลัมน์) */}
+            <div className="lg:col-span-8">
+              {activeTab === 'INVENTORY' ? (
+                <WarehouseInventoryTable
+                  catalog={catalog}
+                  transactions={transactions}
+                  onSelectProductForTransaction={handleSelectProductFromInventory}
+                  onOpenCatalogModal={() => setIsCatalogModalOpen(true)}
+                  isGoogleConnected={Boolean(user && spreadsheetInfo)}
+                />
+              ) : (
+                <StockTable
+                  transactions={transactions}
+                  onDelete={handleDeleteTransaction}
+                  onEdit={(item) => {
+                    setEditingTransaction(item);
+                    const el = document.getElementById('stock-form-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    else window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  isGoogleConnected={Boolean(user && spreadsheetInfo)}
+                  isDeleting={isDeleting}
+                />
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* Footer */}

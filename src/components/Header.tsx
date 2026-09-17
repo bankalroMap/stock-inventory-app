@@ -1,4 +1,4 @@
-import { Boxes, Code2, FileSpreadsheet, Trash2, PackagePlus } from 'lucide-react';
+import { Boxes, Code2, FileSpreadsheet, Trash2, PackagePlus, BarChart3 } from 'lucide-react';
 
 interface HeaderProps {
   onClearData: () => void;
@@ -7,6 +7,8 @@ interface HeaderProps {
   recordCount: number;
   catalogCount: number;
   isGoogleConnected?: boolean;
+  activeTab?: 'INVENTORY' | 'TRANSACTIONS' | 'DASHBOARD';
+  onSelectTab?: (tab: 'INVENTORY' | 'TRANSACTIONS' | 'DASHBOARD') => void;
 }
 
 export function Header({
@@ -16,6 +18,8 @@ export function Header({
   recordCount,
   catalogCount,
   isGoogleConnected = false,
+  activeTab,
+  onSelectTab,
 }: HeaderProps) {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
@@ -48,6 +52,25 @@ export function Header({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Monitor Dashboard Quick Toggle */}
+          {onSelectTab && (
+            <button
+              type="button"
+              onClick={() => onSelectTab(activeTab === 'DASHBOARD' ? 'INVENTORY' : 'DASHBOARD')}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'DASHBOARD'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+              }`}
+              title="ดูกราฟและรายงานภาพรวมคลังสินค้า"
+              id="toggle-dashboard-btn"
+            >
+              <BarChart3 className="w-4 h-4 text-indigo-500" />
+              <span className="hidden sm:inline">Monitor</span>
+              <span>Dashboard</span>
+            </button>
+          )}
+
           {/* Manage Product Catalog / Import */}
           <button
             type="button"
@@ -94,4 +117,5 @@ export function Header({
     </header>
   );
 }
+
 
