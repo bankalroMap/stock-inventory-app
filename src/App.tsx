@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User } from 'firebase/auth';
-import { StockTransaction } from './types';
+import { StockTransaction, AuthUser } from './types';
 import {
   getStoredTransactions,
   saveTransactionsToStorage,
@@ -34,7 +33,7 @@ export default function App() {
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
 
   // Google Auth & Sheets Backend State
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(null);
   const [isConnectingSheet, setIsConnectingSheet] = useState(false);
@@ -100,11 +99,11 @@ export default function App() {
   }, [connectToSpreadsheet]);
 
   // Handle Google Sign-In
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (forceGsi = false) => {
     setIsConnectingSheet(true);
     setSheetError(null);
     try {
-      const res = await googleSignIn();
+      const res = await googleSignIn(forceGsi);
       if (res) {
         setUser(res.user);
         setToken(res.accessToken);
