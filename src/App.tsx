@@ -8,6 +8,7 @@ import {
   getStoredProductCatalog,
   saveProductCatalogToStorage,
   resetProductCatalogToDefault,
+  INITIAL_MOCK_TRANSACTIONS,
 } from './utils/storage';
 import {
   initAuth,
@@ -19,6 +20,7 @@ import {
   findOrCreateStockSpreadsheet,
   fetchTransactionsFromSheet,
   appendTransactionToSheet,
+  batchAppendTransactionsToSheet,
   updateTransactionInSheet,
   deleteTransactionFromSheet,
   fetchCatalogFromSheet,
@@ -122,19 +124,35 @@ export default function App() {
       setIsSyncing(true);
       try {
         const [remoteData, remoteCatalog] = await Promise.all([
-          fetchTransactionsFromSheet(authToken, sheet.id),
-          fetchCatalogFromSheet(authToken, sheet.id),
+          fetchTransactionsFromSheet(authToken, sheet.id, sheet.stockSheetTitle),
+          fetchCatalogFromSheet(authToken, sheet.id, sheet.catalogSheetTitle),
         ]);
-        setTransactions(remoteData);
-        saveTransactionsToStorage(remoteData);
+
+        const localTx = getStoredTransactions();
+        let effectiveTransactions = remoteData;
+
+        // If Google Sheet has 0 transactions but local storage had active transactions,
+        // automatically back up / upload them to the Google Sheet so the dashboard graphs don't disappear!
+        if (remoteData.length === 0 && localTx.length > 0) {
+          try {
+            await batchAppendTransactionsToSheet(authToken, sheet.id, localTx, sheet.stockSheetTitle);
+            effectiveTransactions = localTx;
+          } catch (uploadErr) {
+            console.warn('Could not batch upload local transactions:', uploadErr);
+            effectiveTransactions = localTx;
+          }
+        }
+
+        setTransactions(effectiveTransactions);
+        saveTransactionsToStorage(effectiveTransactions);
 
         if (remoteCatalog && remoteCatalog.length > 0) {
           setCatalog(remoteCatalog);
           saveProductCatalogToStorage(remoteCatalog);
           // Update remaining stock in backend sheet
-          await saveCatalogToSheet(authToken, sheet.id, remoteCatalog, remoteData);
+          await saveCatalogToSheet(authToken, sheet.id, remoteCatalog, effectiveTransactions, sheet.catalogSheetTitle);
         } else if (currentCatalog && currentCatalog.length > 0) {
-          await saveCatalogToSheet(authToken, sheet.id, currentCatalog, remoteData);
+          await saveCatalogToSheet(authToken, sheet.id, currentCatalog, effectiveTransactions, sheet.catalogSheetTitle);
         }
       } catch (fetchErr: any) {
         console.warn('Initial sheet fetch:', fetchErr);
@@ -212,8 +230,8 @@ export default function App() {
     setSheetError(null);
     try {
       const [remoteTransactions, remoteCatalog] = await Promise.all([
-        fetchTransactionsFromSheet(activeToken, spreadsheetInfo.id),
-        fetchCatalogFromSheet(activeToken, spreadsheetInfo.id),
+        fetchTransactionsFromSheet(activeToken, spreadsheetInfo.id, spreadsheetInfo.stockSheetTitle),
+        fetchCatalogFromSheet(activeToken, spreadsheetInfo.id, spreadsheetInfo.catalogSheetTitle),
       ]);
       setTransactions(remoteTransactions);
       saveTransactionsToStorage(remoteTransactions);
@@ -225,7 +243,7 @@ export default function App() {
       }
 
       // Automatically refresh backend "จำนวนคงเหลือในคลัง" column with current stock counts
-      await saveCatalogToSheet(activeToken, spreadsheetInfo.id, resolvedCatalog, remoteTransactions);
+      await saveCatalogToSheet(activeToken, spreadsheetInfo.id, resolvedCatalog, remoteTransactions, spreadsheetInfo.catalogSheetTitle);
     } catch (err: any) {
       console.error('Sync error:', err);
       setSheetError(err?.message || 'ซิงค์ข้อมูลจาก Google Sheets ไม่สำเร็จ');
@@ -244,18 +262,38 @@ export default function App() {
 
     setIsSyncingCatalog(true);
     try {
-      const remoteCatalog = await fetchCatalogFromSheet(activeToken, spreadsheetInfo.id);
+      const remoteCatalog = await fetchCatalogFromSheet(activeToken, spreadsheetInfo.id, spreadsheetInfo.catalogSheetTitle);
       if (remoteCatalog && remoteCatalog.length > 0) {
         setCatalog(remoteCatalog);
         saveProductCatalogToStorage(remoteCatalog);
         // Sync remaining stock
-        await saveCatalogToSheet(activeToken, spreadsheetInfo.id, remoteCatalog, transactions);
+        await saveCatalogToSheet(activeToken, spreadsheetInfo.id, remoteCatalog, transactions, spreadsheetInfo.catalogSheetTitle);
       }
     } catch (err: any) {
       console.error('Catalog sync error:', err);
       setSheetError(err?.message || 'ซิงค์แคตตาล็อกสินค้าจาก Google Sheets ไม่สำเร็จ');
     } finally {
       setIsSyncingCatalog(false);
+    }
+  };
+
+  // Seed sample transactions into application & Google Sheets if connected
+  const handleSeedSampleTransactions = async () => {
+    const sample = INITIAL_MOCK_TRANSACTIONS;
+    setTransactions(sample);
+    saveTransactionsToStorage(sample);
+    const activeToken = token || (await getAccessToken());
+    if (activeToken && spreadsheetInfo) {
+      setIsSyncing(true);
+      try {
+        await batchAppendTransactionsToSheet(activeToken, spreadsheetInfo.id, sample, spreadsheetInfo.stockSheetTitle);
+        // Also update catalog remaining stock
+        await saveCatalogToSheet(activeToken, spreadsheetInfo.id, catalog, sample, spreadsheetInfo.catalogSheetTitle);
+      } catch (e) {
+        console.warn('Failed to append sample transactions to Google Sheets:', e);
+      } finally {
+        setIsSyncing(false);
+      }
     }
   };
 
@@ -498,6 +536,8 @@ export default function App() {
               setActiveTab('INVENTORY');
               window.scrollTo({ top: 400, behavior: 'smooth' });
             }}
+            onSeedSampleData={handleSeedSampleTransactions}
+            isGoogleConnected={Boolean(user && spreadsheetInfo)}
           />
         ) : (
           /* โครงสร้าง 2 คอลัมน์สำหรับบันทึกและจัดการสต๊อก */

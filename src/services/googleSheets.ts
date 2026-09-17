@@ -1,5 +1,5 @@
 import { StockTransaction, ProductCatalogItem } from '../types';
-import { calculateProductInventory } from '../utils/inventory';
+import { calculateProductInventory, parseFlexibleDate } from '../utils/inventory';
 
 export const STOCK_SHEET_TITLE = 'สต๊อกสินค้า';
 export const CATALOG_SHEET_TITLE = 'คลังสินค้า';
@@ -11,7 +11,38 @@ export interface SpreadsheetInfo {
   name: string;
   url: string;
   sheetId: number;
+  stockSheetTitle: string;
   catalogSheetId?: number;
+  catalogSheetTitle: string;
+}
+
+function identifySheets(sheets: any[]) {
+  const catalogSheet = sheets?.find((s: any) => {
+    const t = (s.properties?.title || '').toLowerCase();
+    return t === CATALOG_SHEET_TITLE.toLowerCase() || t.includes('คลัง') || t.includes('catalog');
+  });
+
+  const stockSheet =
+    sheets?.find((s: any) => {
+      if (catalogSheet && s.properties?.sheetId === catalogSheet.properties?.sheetId) return false;
+      const t = (s.properties?.title || '').toLowerCase();
+      return (
+        t === STOCK_SHEET_TITLE.toLowerCase() ||
+        t.includes('สต๊อก') ||
+        t.includes('stock') ||
+        t.includes('รายการ') ||
+        t.includes('ประวัติ')
+      );
+    }) ||
+    sheets?.find((s: any) => !catalogSheet || s.properties?.sheetId !== catalogSheet.properties?.sheetId) ||
+    sheets?.[0];
+
+  return {
+    stockSheetId: stockSheet?.properties?.sheetId ?? 0,
+    stockSheetTitle: stockSheet?.properties?.title ?? STOCK_SHEET_TITLE,
+    catalogSheetId: catalogSheet?.properties?.sheetId,
+    catalogSheetTitle: catalogSheet?.properties?.title ?? CATALOG_SHEET_TITLE,
+  };
 }
 
 const TABLE_HEADERS = [
@@ -61,31 +92,24 @@ export async function findOrCreateStockSpreadsheet(
       );
       if (res.ok) {
         const meta = await res.json();
-        const mainSheet =
-          meta.sheets?.find((s: any) => s.properties?.title === STOCK_SHEET_TITLE) ||
-          meta.sheets?.[0];
-        const sheetId = mainSheet?.properties?.sheetId ?? 0;
-        const sheetTitle = mainSheet?.properties?.title ?? STOCK_SHEET_TITLE;
+        const sheetInfo = identifySheets(meta.sheets || []);
 
         // Ensure headers exist for transactions
-        await ensureHeaders(accessToken, savedId, sheetTitle);
+        await ensureHeaders(accessToken, savedId, sheetInfo.stockSheetTitle);
 
         // Check or create catalog sheet
-        let catalogSheet = meta.sheets?.find(
-          (s: any) => s.properties?.title === CATALOG_SHEET_TITLE
-        );
-        let catalogSheetId = catalogSheet?.properties?.sheetId;
-        if (!catalogSheet) {
+        let catalogSheetId = sheetInfo.catalogSheetId;
+        if (catalogSheetId === undefined) {
           catalogSheetId = await createCatalogSheet(accessToken, savedId);
         }
-        await ensureCatalogHeaders(accessToken, savedId);
+        await ensureCatalogHeaders(accessToken, savedId, sheetInfo.catalogSheetTitle);
 
         // If catalog sheet is empty and initialCatalogItems provided, populate it
         if (initialCatalogItems && initialCatalogItems.length > 0) {
           try {
-            const existingCatalog = await fetchCatalogFromSheet(accessToken, savedId);
+            const existingCatalog = await fetchCatalogFromSheet(accessToken, savedId, sheetInfo.catalogSheetTitle);
             if (existingCatalog.length === 0) {
-              await saveCatalogToSheet(accessToken, savedId, initialCatalogItems);
+              await saveCatalogToSheet(accessToken, savedId, initialCatalogItems, [], sheetInfo.catalogSheetTitle);
             }
           } catch (e) {
             console.warn('Could not populate initial catalog:', e);
@@ -96,8 +120,10 @@ export async function findOrCreateStockSpreadsheet(
           id: savedId,
           name: meta.properties?.title || SPREADSHEET_NAME,
           url: `https://docs.google.com/spreadsheets/d/${savedId}/edit`,
-          sheetId,
+          sheetId: sheetInfo.stockSheetId,
+          stockSheetTitle: sheetInfo.stockSheetTitle,
           catalogSheetId,
+          catalogSheetTitle: sheetInfo.catalogSheetTitle,
         };
       }
     } catch (err) {
@@ -130,38 +156,31 @@ export async function findOrCreateStockSpreadsheet(
             headers: { Authorization: `Bearer ${accessToken}` },
           }
         );
-        let sheetId = 0;
-        let catalogSheetId: number | undefined;
-        let sheetTitle = STOCK_SHEET_TITLE;
+        let sheetInfo = {
+          stockSheetId: 0,
+          stockSheetTitle: STOCK_SHEET_TITLE,
+          catalogSheetId: undefined as number | undefined,
+          catalogSheetTitle: CATALOG_SHEET_TITLE,
+        };
 
         if (metaRes.ok) {
           const meta = await metaRes.json();
-          const target =
-            meta.sheets?.find((s: any) => s.properties?.title === STOCK_SHEET_TITLE) ||
-            meta.sheets?.[0];
-          sheetId = target?.properties?.sheetId ?? 0;
-          sheetTitle = target?.properties?.title ?? STOCK_SHEET_TITLE;
-
-          const catTarget = meta.sheets?.find(
-            (s: any) => s.properties?.title === CATALOG_SHEET_TITLE
-          );
-          if (catTarget) {
-            catalogSheetId = catTarget.properties?.sheetId;
-          }
+          sheetInfo = identifySheets(meta.sheets || []);
         }
 
-        await ensureHeaders(accessToken, file.id, sheetTitle);
+        await ensureHeaders(accessToken, file.id, sheetInfo.stockSheetTitle);
 
+        let catalogSheetId = sheetInfo.catalogSheetId;
         if (catalogSheetId === undefined) {
           catalogSheetId = await createCatalogSheet(accessToken, file.id);
         }
-        await ensureCatalogHeaders(accessToken, file.id);
+        await ensureCatalogHeaders(accessToken, file.id, sheetInfo.catalogSheetTitle);
 
         if (initialCatalogItems && initialCatalogItems.length > 0) {
           try {
-            const existing = await fetchCatalogFromSheet(accessToken, file.id);
+            const existing = await fetchCatalogFromSheet(accessToken, file.id, sheetInfo.catalogSheetTitle);
             if (existing.length === 0) {
-              await saveCatalogToSheet(accessToken, file.id, initialCatalogItems);
+              await saveCatalogToSheet(accessToken, file.id, initialCatalogItems, [], sheetInfo.catalogSheetTitle);
             }
           } catch (e) {
             console.warn('Could not populate initial catalog on existing sheet:', e);
@@ -172,8 +191,10 @@ export async function findOrCreateStockSpreadsheet(
           id: file.id,
           name: file.name,
           url: file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`,
-          sheetId,
+          sheetId: sheetInfo.stockSheetId,
+          stockSheetTitle: sheetInfo.stockSheetTitle,
           catalogSheetId,
+          catalogSheetTitle: sheetInfo.catalogSheetTitle,
         };
       }
     }
@@ -232,7 +253,7 @@ export async function findOrCreateStockSpreadsheet(
   // If initialCatalogItems provided, populate the catalog sheet
   if (initialCatalogItems && initialCatalogItems.length > 0) {
     try {
-      await saveCatalogToSheet(accessToken, newId, initialCatalogItems);
+      await saveCatalogToSheet(accessToken, newId, initialCatalogItems, [], CATALOG_SHEET_TITLE);
     } catch (e) {
       console.warn('Could not seed catalog into new spreadsheet:', e);
     }
@@ -243,7 +264,9 @@ export async function findOrCreateStockSpreadsheet(
     name: SPREADSHEET_NAME,
     url: `https://docs.google.com/spreadsheets/d/${newId}/edit`,
     sheetId: newSheetId,
+    stockSheetTitle: STOCK_SHEET_TITLE,
     catalogSheetId: newCatalogSheetId,
+    catalogSheetTitle: CATALOG_SHEET_TITLE,
   };
 }
 
@@ -296,52 +319,149 @@ export async function fetchTransactionsFromSheet(
   spreadsheetId: string,
   sheetTitle: string = STOCK_SHEET_TITLE
 ): Promise<StockTransaction[]> {
-  const range = `${encodeURIComponent(sheetTitle)}!A2:L`;
-  const res = await fetch(
+  let range = `${encodeURIComponent(sheetTitle)}!A1:L`;
+  let res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
   );
 
+  // If query failed (e.g. sheet was renamed or sheetTitle doesn't exist), try to find the actual stock sheet
+  if (!res.ok) {
+    try {
+      const metaRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(sheetId,title)`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        const info = identifySheets(meta.sheets || []);
+        if (info.stockSheetTitle && info.stockSheetTitle !== sheetTitle) {
+          range = `${encodeURIComponent(info.stockSheetTitle)}!A1:L`;
+          res = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   if (!res.ok) {
     if (res.status === 404) {
       throw new Error('ไม่พบเอกสาร Google Sheet หรือเอกสารถูกลบ');
     }
     const errText = await res.text();
-    throw new Error(`ไม่สามารถอ่านข้อมูลจาก Google Sheet ได้: ${errText}`);
+    console.warn(`Could not read transactions from Google Sheet: ${errText}`);
+    return [];
   }
 
   const data = await res.json();
-  const rows = data.values || [];
+  const allRows: any[][] = data.values || [];
+  if (allRows.length === 0) return [];
 
+  const firstRow = allRows[0] || [];
+  // Detect if firstRow is header
+  const isHeaderRow = firstRow.some((cell: any) => {
+    const s = String(cell || '').toLowerCase();
+    return (
+      s.includes('วัน') ||
+      s.includes('ประเภท') ||
+      s.includes('รายการ') ||
+      s.includes('จำนวน') ||
+      s.includes('sku') ||
+      s.includes('date') ||
+      s.includes('type')
+    );
+  });
+
+  let colId = -1, colDate = -1, colType = -1, colCat = -1, colProd = -1;
+  let colPrice = -1, colQty = -1, colUnit = -1, colTotal = -1, colRep = -1, colNote = -1, colTime = -1;
+
+  if (isHeaderRow) {
+    firstRow.forEach((h: any, idx: number) => {
+      const s = String(h || '').trim().toLowerCase();
+      if (s.includes('รหัส') || s === 'id' || s === 'sku') {
+        if (colId === -1) colId = idx;
+      } else if (s.includes('วัน') || s.includes('date')) {
+        if (colDate === -1) colDate = idx;
+      } else if (s.includes('ประเภท') || s.includes('type') || s.includes('เข้า') || s.includes('ออก')) {
+        if (colType === -1) colType = idx;
+      } else if (s.includes('กลุ่ม') || s.includes('หมวด') || s.includes('category')) {
+        if (colCat === -1) colCat = idx;
+      } else if (s.includes('ชื่อ') || s.includes('รายการ') || s.includes('สินค้า') || s.includes('product') || s.includes('item')) {
+        if (colProd === -1) colProd = idx;
+      } else if ((s.includes('ราคา') || s.includes('price')) && !s.includes('รวม') && !s.includes('total')) {
+        if (colPrice === -1) colPrice = idx;
+      } else if (s.includes('จำนวน') || s.includes('qty') || s.includes('quantity')) {
+        if (colQty === -1) colQty = idx;
+      } else if (s.includes('หน่วย') || s.includes('unit')) {
+        if (colUnit === -1) colUnit = idx;
+      } else if (s.includes('รวม') || s.includes('total')) {
+        if (colTotal === -1) colTotal = idx;
+      } else if (s.includes('ผู้') || s.includes('user') || s.includes('reporter')) {
+        if (colRep === -1) colRep = idx;
+      } else if (s.includes('หมายเหตุ') || s.includes('note') || s.includes('remark')) {
+        if (colNote === -1) colNote = idx;
+      } else if (s.includes('เวลา') || s.includes('time') || s.includes('timestamp')) {
+        if (colTime === -1) colTime = idx;
+      }
+    });
+  }
+
+  // Fallbacks if columns not identified
+  if (colId === -1) colId = 0;
+  if (colDate === -1) colDate = 1;
+  if (colType === -1) colType = 2;
+  if (colCat === -1) colCat = 3;
+  if (colProd === -1) colProd = 4;
+  if (colPrice === -1) colPrice = 5;
+  if (colQty === -1) colQty = 6;
+  if (colUnit === -1) colUnit = 7;
+  if (colTotal === -1) colTotal = 8;
+  if (colRep === -1) colRep = 9;
+  if (colNote === -1) colNote = 10;
+  if (colTime === -1) colTime = 11;
+
+  const dataRows = isHeaderRow ? allRows.slice(1) : allRows;
   const transactions: StockTransaction[] = [];
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.length === 0 || !row[0]) continue;
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    if (!row || row.length === 0) continue;
 
-    const id = String(row[0] || '').trim();
-    const date = String(row[1] || '').trim();
-    const rawType = String(row[2] || '').trim();
-    const type = rawType.includes('OUT') || rawType.includes('ออก') ? 'OUT' : 'IN';
-    const category = String(row[3] || '').trim();
-    const productName = String(row[4] || '').trim();
-    const unitPrice = parseFloat(String(row[5]).replace(/[^0-9.-]+/g, '')) || 0;
-    const quantity = parseInt(String(row[6]).replace(/[^0-9.-]+/g, ''), 10) || 0;
-    const unit = String(row[7] || 'ชิ้น').trim();
+    const rawProd = String(colProd !== -1 ? row[colProd] || '' : '').trim();
+    const rawId = String(colId !== -1 ? row[colId] || '' : '').trim();
+    if (!rawProd && !rawId) continue;
+
+    const rawDate = String(colDate !== -1 ? row[colDate] || '' : '').trim();
+    const parsedDate = parseFlexibleDate(rawDate);
+    const date = parsedDate
+      ? `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+      : rawDate || new Date().toISOString().split('T')[0];
+
+    const rawType = String(colType !== -1 ? row[colType] || '' : '').trim().toUpperCase();
+    const type = rawType.includes('OUT') || rawType.includes('ออก') || rawType.includes('ขาย') || rawType.includes('จ่าย') ? 'OUT' : 'IN';
+    const category = String(colCat !== -1 ? row[colCat] || '' : 'ทั่วไป').trim();
+    const productName = rawProd || rawId;
+    const unitPrice = parseFloat(String(colPrice !== -1 ? row[colPrice] || '0' : '0').replace(/[^0-9.-]+/g, '')) || 0;
+    const quantity = parseInt(String(colQty !== -1 ? row[colQty] || '0' : '0').replace(/[^0-9.-]+/g, ''), 10) || 0;
+    const unit = String(colUnit !== -1 ? row[colUnit] || 'ชิ้น' : 'ชิ้น').trim();
     const totalPrice =
-      parseFloat(String(row[8]).replace(/[^0-9.-]+/g, '')) || unitPrice * quantity;
-    const reporter = String(row[9] || '').trim();
-    const note = String(row[10] || '').trim();
-    const createdAt = String(row[11] || new Date().toISOString()).trim();
+      parseFloat(String(colTotal !== -1 ? row[colTotal] || '0' : '0').replace(/[^0-9.-]+/g, '')) || unitPrice * quantity;
+    const reporter = String(colRep !== -1 ? row[colRep] || '' : '').trim();
+    const note = String(colNote !== -1 ? row[colNote] || '' : '').trim();
+    const createdAt = String(colTime !== -1 ? row[colTime] || '' : '').trim() || new Date().toISOString();
 
     transactions.push({
-      id: id || `TX-${1000 + i}`,
-      date: date || new Date().toISOString().split('T')[0],
+      id: rawId || `TX-${1000 + i}`,
+      date,
       type,
       category: category || 'ทั่วไป',
-      productName: productName || 'ไม่ระบุชื่อ',
+      productName,
       quantity,
       unit,
       unitPrice,
@@ -398,6 +518,56 @@ export async function appendTransactionToSheet(
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`บันทึกลง Google Sheet ไม่สำเร็จ: ${errText}`);
+  }
+}
+
+/**
+ * Batch append multiple transactions to Google Sheets at once
+ */
+export async function batchAppendTransactionsToSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  transactions: StockTransaction[],
+  sheetTitle: string = STOCK_SHEET_TITLE
+): Promise<void> {
+  if (!transactions || transactions.length === 0) return;
+  await ensureHeaders(accessToken, spreadsheetId, sheetTitle);
+
+  // Write in chronological order
+  const ordered = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const rows = ordered.map((t) => [
+    t.id,
+    t.date,
+    t.type === 'IN' ? 'รับเข้า (IN)' : 'จ่ายออก (OUT)',
+    t.category,
+    t.productName,
+    t.unitPrice,
+    t.quantity,
+    t.unit || 'ชิ้น',
+    t.totalPrice,
+    t.reporter,
+    t.note || '',
+    t.createdAt,
+  ]);
+
+  const range = `${encodeURIComponent(sheetTitle)}!A:L:append?valueInputOption=USER_ENTERED`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: rows,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn(`Batch append failed: ${errText}`);
   }
 }
 
@@ -635,20 +805,44 @@ export async function ensureCatalogHeaders(
 
 /**
  * Fetch product catalog items from the 'คลังสินค้า' sheet
- * Supports both new 10-column layout (with stock balance) and legacy 7-column layout.
+ * Supports both new 10-column layout (with stock balance) and legacy 7-column layout,
+ * as well as custom user column layouts with dynamic header matching.
  */
 export async function fetchCatalogFromSheet(
   accessToken: string,
   spreadsheetId: string,
   sheetTitle: string = CATALOG_SHEET_TITLE
 ): Promise<ProductCatalogItem[]> {
-  const range = `${encodeURIComponent(sheetTitle)}!A1:J`;
-  const res = await fetch(
+  let range = `${encodeURIComponent(sheetTitle)}!A1:J`;
+  let res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
   );
+
+  // If query failed (e.g. sheet was renamed), try to find the actual catalog sheet
+  if (!res.ok) {
+    try {
+      const metaRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(sheetId,title)`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        const info = identifySheets(meta.sheets || []);
+        if (info.catalogSheetTitle && info.catalogSheetTitle !== sheetTitle) {
+          range = `${encodeURIComponent(info.catalogSheetTitle)}!A1:J`;
+          res = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   if (!res.ok) {
     console.warn('Could not fetch catalog from sheet:', await res.text());
@@ -656,12 +850,44 @@ export async function fetchCatalogFromSheet(
   }
 
   const data = await res.json();
-  const allRows = data.values || [];
+  const allRows: any[][] = data.values || [];
   if (allRows.length <= 1) return [];
 
   const headerRow = allRows[0] || [];
+  let colSku = -1, colName = -1, colCat = -1, colStock = -1, colUnit = -1;
+  let colCost = -1, colSell = -1, colNote = -1;
+
+  headerRow.forEach((h: any, idx: number) => {
+    const s = String(h || '').trim().toLowerCase();
+    if (s.includes('รหัส') || s === 'sku' || s === 'code') colSku = idx;
+    else if (s.includes('ชื่อ') || s.includes('รายการ') || s.includes('name') || s.includes('สินค้า')) {
+      if (colName === -1) colName = idx;
+    } else if (s.includes('กลุ่ม') || s.includes('หมวด') || s.includes('ประเภท') || s.includes('category')) {
+      if (colCat === -1) colCat = idx;
+    } else if (s.includes('คงเหลือ') || s.includes('สต๊อก') || s.includes('balance') || s.includes('stock')) {
+      if (colStock === -1) colStock = idx;
+    } else if (s.includes('หน่วย') || s.includes('unit')) {
+      if (colUnit === -1) colUnit = idx;
+    } else if (s.includes('ทุน') || s.includes('รับเข้า') || s.includes('cost')) {
+      if (colCost === -1) colCost = idx;
+    } else if ((s.includes('ขาย') || s.includes('price') || s.includes('selling')) && !s.includes('ทุน')) {
+      if (colSell === -1) colSell = idx;
+    } else if (s.includes('หมายเหตุ') || s.includes('note') || s.includes('remark')) {
+      if (colNote === -1) colNote = idx;
+    }
+  });
+
   const isNewLayout =
     String(headerRow[3] || '').includes('คงเหลือ') || headerRow.length >= 8;
+
+  if (colSku === -1) colSku = 0;
+  if (colName === -1) colName = 1;
+  if (colCat === -1) colCat = 2;
+  if (colStock === -1) colStock = isNewLayout ? 3 : -1;
+  if (colUnit === -1) colUnit = isNewLayout ? 4 : 5;
+  if (colCost === -1) colCost = isNewLayout ? 6 : 3;
+  if (colSell === -1) colSell = isNewLayout ? 7 : 4;
+  if (colNote === -1) colNote = isNewLayout ? 9 : 6;
 
   const dataRows = allRows.slice(1);
   const catalog: ProductCatalogItem[] = [];
@@ -670,8 +896,8 @@ export async function fetchCatalogFromSheet(
     const row = dataRows[i];
     if (!row || row.length === 0) continue;
 
-    const rawCode = String(row[0] || '').trim();
-    const rawName = String(row[1] || '').trim();
+    const rawCode = String(colSku !== -1 ? row[colSku] || '' : '').trim();
+    const rawName = String(colName !== -1 ? row[colName] || '' : '').trim();
 
     // In case the user typed product name in column A or B
     let code = rawCode;
@@ -682,49 +908,28 @@ export async function fetchCatalogFromSheet(
     }
     if (!name) continue;
 
-    const category = String(row[2] || 'ทั่วไป').trim();
+    const category = String(colCat !== -1 ? row[colCat] || 'ทั่วไป' : 'ทั่วไป').trim();
+    const stockVal = colStock !== -1 ? parseFloat(String(row[colStock] || '0').replace(/[^0-9.-]+/g, '')) || 0 : undefined;
+    const unit = String(colUnit !== -1 ? row[colUnit] || 'ชิ้น' : 'ชิ้น').trim();
+    let costPrice = colCost !== -1 ? parseFloat(String(row[colCost] || '0').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    let sellingPrice = colSell !== -1 ? parseFloat(String(row[colSell] || '0').replace(/[^0-9.-]+/g, '')) || 0 : 0;
 
-    if (isNewLayout) {
-      // New layout:
-      // A: SKU, B: Name, C: Category, D: Remaining Stock, E: Unit, F: Status, G: Cost, H: Selling, I: Total Value, J: Note
-      const stockVal = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
-      const unit = String(row[4] || 'ชิ้น').trim();
-      const costPrice = parseFloat(String(row[6] || '0').replace(/[^0-9.-]+/g, '')) || 0;
-      const sellingPrice =
-        parseFloat(String(row[7] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
-      const note = String(row[9] || '').trim();
+    if (costPrice === 0 && sellingPrice > 0) costPrice = sellingPrice;
+    if (sellingPrice === 0 && costPrice > 0) sellingPrice = costPrice;
 
-      catalog.push({
-        id: code || `PRD-${1000 + i}`,
-        code: code || `PRD-${1000 + i}`,
-        name,
-        category,
-        costPrice,
-        sellingPrice,
-        unit: unit || 'ชิ้น',
-        initialStock: stockVal,
-        note: note || undefined,
-      });
-    } else {
-      // Legacy layout:
-      // A: SKU, B: Name, C: Category, D: Cost, E: Selling, F: Unit, G: Note
-      const costPrice = parseFloat(String(row[3] || '0').replace(/[^0-9.-]+/g, '')) || 0;
-      const sellingPrice =
-        parseFloat(String(row[4] || '0').replace(/[^0-9.-]+/g, '')) || costPrice;
-      const unit = String(row[5] || 'ชิ้น').trim();
-      const note = String(row[6] || '').trim();
+    const note = colNote !== -1 ? String(row[colNote] || '').trim() : undefined;
 
-      catalog.push({
-        id: code || `PRD-${1000 + i}`,
-        code: code || `PRD-${1000 + i}`,
-        name,
-        category,
-        costPrice,
-        sellingPrice,
-        unit: unit || 'ชิ้น',
-        note: note || undefined,
-      });
-    }
+    catalog.push({
+      id: code || `PRD-${1000 + i}`,
+      code: code || `PRD-${1000 + i}`,
+      name,
+      category,
+      costPrice,
+      sellingPrice,
+      unit: unit || 'ชิ้น',
+      initialStock: stockVal,
+      note: note || undefined,
+    });
   }
 
   return catalog;

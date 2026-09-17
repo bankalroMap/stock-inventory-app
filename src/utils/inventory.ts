@@ -1,4 +1,48 @@
 import { StockTransaction, ProductCatalogItem, ProductStockStatus, ProductInventorySummary } from '../types';
+import { INITIAL_PRODUCT_CATALOG } from './storage';
+
+/**
+ * Parses multiple date formats safely (ISO, DD/MM/YYYY, DD/MM/BBBB Thai Buddhist era, Excel serial)
+ */
+export function parseFlexibleDate(dateInput?: string | number | Date | null): Date | null {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput;
+
+  const str = String(dateInput).trim();
+  if (!str) return null;
+
+  // Handle Excel serial date numbers e.g. 45552
+  if (/^\d{5}$/.test(str)) {
+    const serial = parseInt(str, 10);
+    const d = new Date((serial - 25569) * 86400 * 1000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    let year = parseInt(dmyMatch[3], 10);
+    if (year > 2400) year -= 543; // Thai Buddhist era (พ.ศ. -> ค.ศ.)
+    const d = new Date(year, month, day);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Handle YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+  if (ymdMatch) {
+    let year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    if (year > 2400) year -= 543;
+    const d = new Date(year, month, day);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const standard = new Date(str);
+  return isNaN(standard.getTime()) ? null : standard;
+}
 
 /**
  * Calculates days difference between two dates (date string or Date object).
@@ -6,9 +50,10 @@ import { StockTransaction, ProductCatalogItem, ProductStockStatus, ProductInvent
  */
 export function getDaysDifference(pastDateStr: string, referenceDate: Date = new Date()): number {
   try {
-    const past = new Date(pastDateStr).getTime();
+    const parsed = parseFlexibleDate(pastDateStr);
+    if (!parsed) return 0;
+    const past = parsed.getTime();
     const ref = referenceDate.getTime();
-    if (isNaN(past)) return 0;
     const diffMs = ref - past;
     if (diffMs <= 0) return 0;
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -22,9 +67,9 @@ export function getDaysDifference(pastDateStr: string, referenceDate: Date = new
  *
  * Status criteria:
  * 1. สินค้าหมด (สีแดง): currentStock <= 0
- * 2. DeadStock (สีเทา): currentStock > 0 AND สินค้าจมทุนยังขายไม่ออกมาแล้ว 30 วัน (daysWithoutSale >= 30)
+ * 2. DeadStock (สีเทา): currentStock > 0 AND มีประวัติรับเข้าหรือขายและค้างนิ่งเกิน 30 วัน
  * 3. สต๊อกต่ำ (สีเหลือง): currentStock > 0 AND currentStock < 5 ชิ้น
- * 4. สินค้าปกติ (สีเขียว): currentStock >= 5 ชิ้น และมีการเคลื่อนไหวขายออกภายใน 30 วัน
+ * 4. สินค้าปกติ (สีเขียว): currentStock >= 5 ชิ้น
  */
 export function calculateProductInventory(
   item: ProductCatalogItem,
@@ -74,9 +119,9 @@ export function calculateProductInventory(
   } else if (firstInDate) {
     // Has never been sold, but was received into stock: days since first receipt
     daysWithoutSale = getDaysDifference(firstInDate, referenceDate);
-  } else if (baseStock > 0) {
-    // Has initial stock but no transaction record, assume stalled if no sale
-    daysWithoutSale = 35; // default to deadstock if initial stock has 0 movement
+  } else if (baseStock > 0 && transactions.length > 0) {
+    // There are active transactions in warehouse but this item was never moved
+    daysWithoutSale = 35;
   }
 
   // Determine status
@@ -97,8 +142,27 @@ export function calculateProductInventory(
     statusLabel = 'สินค้าปกติ';
   }
 
-  const cost = item.costPrice ?? 0;
-  const sell = item.sellingPrice ?? 0;
+  let cost = item.costPrice ?? 0;
+  let sell = item.sellingPrice ?? 0;
+
+  // If cost and sell price are 0, check if transactions have price
+  if (cost === 0 && sell === 0 && productTx.length > 0) {
+    const txWithPrice = productTx.find((t) => (t.unitPrice || 0) > 0);
+    if (txWithPrice) {
+      cost = txWithPrice.unitPrice;
+      sell = txWithPrice.unitPrice;
+    }
+  }
+
+  // If still 0, check INITIAL_PRODUCT_CATALOG by name
+  if (cost === 0 && sell === 0) {
+    const matchInit = INITIAL_PRODUCT_CATALOG.find((p) => p.name.trim().toLowerCase() === normName);
+    if (matchInit) {
+      cost = matchInit.costPrice || 0;
+      sell = matchInit.sellingPrice || 0;
+    }
+  }
+
   const totalStockValue = Math.max(0, currentStock) * (cost > 0 ? cost : sell);
 
   return {

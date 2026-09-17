@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Zap,
   Sparkles,
+  Database,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -31,13 +32,15 @@ import {
   Legend,
 } from 'recharts';
 import { StockTransaction, ProductCatalogItem, ProductStockStatus } from '../types';
-import { getFullInventoryList } from '../utils/inventory';
+import { getFullInventoryList, parseFlexibleDate } from '../utils/inventory';
 
 interface MonitorDashboardProps {
   catalog: ProductCatalogItem[];
   transactions: StockTransaction[];
   onSelectProductForTransaction?: (productName: string, type: 'IN' | 'OUT') => void;
   onNavigateToInventory?: (filterStatus?: ProductStockStatus) => void;
+  onSeedSampleData?: () => void;
+  isGoogleConnected?: boolean;
 }
 
 type TimeRange = '7D' | '30D' | '90D' | 'ALL';
@@ -54,15 +57,18 @@ export function MonitorDashboard({
   transactions,
   onSelectProductForTransaction,
   onNavigateToInventory,
+  onSeedSampleData,
+  isGoogleConnected,
 }: MonitorDashboardProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>('30D');
+  // Default to ALL so all transactions from Google Sheets are shown immediately regardless of date
+  const [timeRange, setTimeRange] = useState<TimeRange>('ALL');
 
   // Compute full inventory summary for all products
   const inventoryList = useMemo(() => {
     return getFullInventoryList(catalog, transactions);
   }, [catalog, transactions]);
 
-  // Filter transactions by selected time range
+  // Filter transactions by selected time range using robust flexible date parsing
   const filteredTransactions = useMemo(() => {
     if (timeRange === 'ALL') return transactions;
 
@@ -71,8 +77,9 @@ export function MonitorDashboard({
     const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     return transactions.filter((t) => {
-      const txDate = new Date(t.date || t.createdAt);
-      return txDate >= cutoff;
+      const parsed = parseFlexibleDate(t.date) || parseFlexibleDate(t.createdAt);
+      if (!parsed) return true; // Keep transactions so they aren't lost
+      return parsed >= cutoff;
     });
   }, [transactions, timeRange]);
 
@@ -229,6 +236,37 @@ export function MonitorDashboard({
         </div>
       </div>
 
+      {/* Empty State / Seed Data Helper Banner */}
+      {transactions.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-amber-900">
+                {isGoogleConnected
+                  ? 'ยังไม่มีประวัติการบันทึกใน Google Sheets แผ่นนี้'
+                  : 'ยังไม่มีประวัติการบันทึกรายการสต๊อกสินค้า'}
+              </p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                คุณสามารถนำเข้าชุดข้อมูลตัวอย่าง (11 รายการ) เพื่อทดสอบและแสดงผลกราฟสถิติทันที
+              </p>
+            </div>
+          </div>
+          {onSeedSampleData && (
+            <button
+              type="button"
+              onClick={onSeedSampleData}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>โหลดข้อมูลตัวอย่างเข้าสู่กราฟ</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 4 Summary Health KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. สุขภาพสต๊อกโดยรวม */}
@@ -347,9 +385,22 @@ export function MonitorDashboard({
 
           <div className="h-64 w-full">
             {timelineData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Boxes className="w-8 h-8 text-slate-300 mb-1.5" />
-                ยังไม่มีข้อมูลการบันทึกในช่วงเวลานี้
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                <Boxes className="w-8 h-8 text-slate-300" />
+                <span>
+                  {transactions.length > 0
+                    ? `ไม่มีข้อมูลการบันทึกในช่วง ${timeRange === '7D' ? '7 วัน' : timeRange === '30D' ? '30 วัน' : '90 วัน'} (มีทั้งหมด ${transactions.length} รายการ)`
+                    : 'ยังไม่มีข้อมูลการบันทึกรายการสินค้า'}
+                </span>
+                {transactions.length > 0 && timeRange !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setTimeRange('ALL')}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold transition"
+                  >
+                    แสดงกราฟข้อมูลทั้งหมด ({transactions.length} รายการ)
+                  </button>
+                )}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
